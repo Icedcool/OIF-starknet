@@ -1,9 +1,7 @@
 #[starknet::component]
 pub mod AllowanceTransferComponent {
     use core::num::traits::Bounded;
-    use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
-    use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use openzeppelin_utils::cryptography::snip12::{OffchainMessageHash, SNIP12Metadata};
+    use oif_starknet::libraries::allowance::AllowanceTrait;
     use oif_starknet::permit2::allowance_transfer::interface::{
         Allowance, AllowanceTransferDetails, IAllowanceTransfer, PermitBatch, PermitDetails,
         PermitSingle, TokenSpenderPair, errors, events,
@@ -11,7 +9,9 @@ pub mod AllowanceTransferComponent {
     use oif_starknet::permit2::allowance_transfer::snip12_utils::{
         PermitBatchStructHash, PermitDetailsStructHash, PermitSingleStructHash,
     };
-    use oif_starknet::libraries::allowance::AllowanceTrait;
+    use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
+    use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use openzeppelin_utils::cryptography::snip12::{OffchainMessageHash, SNIP12Metadata};
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
@@ -55,6 +55,7 @@ pub mod AllowanceTransferComponent {
         }
 
         /// Writes ///
+
         fn approve(
             ref self: ComponentState<TContractState>,
             token: ContractAddress,

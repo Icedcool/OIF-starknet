@@ -55,7 +55,9 @@
 //! - **Querying availability of nonces**: Functions to determine if a given nonce is usable or not.
 #[starknet::component]
 pub mod UnorderedNoncesComponent {
-    use oif_starknet::permit2::unordered_nonces::interface::{BitmapTrait, IUnorderedNonces, errors, events};
+    use oif_starknet::permit2::unordered_nonces::interface::{
+        BitmapTrait, IUnorderedNonces, errors, events,
+    };
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,

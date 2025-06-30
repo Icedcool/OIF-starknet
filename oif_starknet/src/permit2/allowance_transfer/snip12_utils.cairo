@@ -1,7 +1,9 @@
 use core::hash::{HashStateExTrait, HashStateTrait};
 use core::poseidon::PoseidonTrait;
+use oif_starknet::permit2::allowance_transfer::interface::{
+    PermitBatch, PermitDetails, PermitSingle,
+};
 use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
-use oif_starknet::permit2::allowance_transfer::interface::{PermitBatch, PermitDetails, PermitSingle};
 
 /// SNIP12 TYPE_HASH of PermitDetails struct.
 /// There's no u8 in SNIP-12, we use u128

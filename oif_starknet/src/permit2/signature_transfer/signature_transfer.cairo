@@ -1,8 +1,5 @@
 #[starknet::component]
 pub mod SignatureTransferComponent {
-    use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
-    use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use openzeppelin_utils::cryptography::snip12::{OffchainMessageHash, SNIP12Metadata};
     use oif_starknet::permit2::signature_transfer::interface::{
         ISignatureTransfer, PermitBatchTransferFrom, PermitTransferFrom, SignatureTransferDetails,
         errors, events,
@@ -13,6 +10,9 @@ pub mod SignatureTransferComponent {
     };
     use oif_starknet::permit2::unordered_nonces::unordered_nonces::UnorderedNoncesComponent;
     use oif_starknet::permit2::unordered_nonces::unordered_nonces::UnorderedNoncesComponent::InternalTrait as NoncesInternalTrait;
+    use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
+    use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use openzeppelin_utils::cryptography::snip12::{OffchainMessageHash, SNIP12Metadata};
     use starknet::ContractAddress;
 
     /// COMPONENTS ///

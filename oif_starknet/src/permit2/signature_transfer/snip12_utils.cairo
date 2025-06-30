@@ -1,11 +1,11 @@
 use core::hash::{HashStateExTrait, HashStateTrait};
 use core::keccak::compute_keccak_byte_array;
 use core::poseidon::PoseidonTrait;
-use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
-use starknet::ContractAddress;
 use oif_starknet::permit2::signature_transfer::interface::{
     PermitBatchTransferFrom, PermitTransferFrom, TokenPermissions,
 };
+use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
+use starknet::ContractAddress;
 
 /// SNIP-12 TYPE_HASHES ///
 /// structs:

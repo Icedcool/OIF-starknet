@@ -23,7 +23,6 @@ pub mod Permit2 {
     //impl SignatureTransferImpl =
     //    SignatureTransferComponent::SignatureTransferImpl<ContractState>;
 
-
     #[storage]
     pub struct Storage {
         #[substorage(v0)]

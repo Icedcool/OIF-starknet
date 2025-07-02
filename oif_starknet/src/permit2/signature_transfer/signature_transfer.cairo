@@ -1,8 +1,10 @@
 #[starknet::component]
 pub mod SignatureTransferComponent {
     use oif_starknet::libraries::permit_hash::{
-        PermitBatchStructHash, PermitSingleStructHash, StructHashPermitBatchTransferFrom,
-        StructHashPermitTransferFrom, StructHashWitnessTrait, TokenPermissionsStructHash,
+        OffchainMessageHashWitnessTrait, PermitBatchStructHash, PermitSingleStructHash,
+        StructHashPermitBatchTransferFrom, StructHashPermitTransferFrom,
+        StructHashWitnessPermitBatchTransferFrom, StructHashWitnessPermitTransferFrom,
+        StructHashWitnessTrait, TokenPermissionsStructHash,
     };
     use oif_starknet::permit2::signature_transfer::interface::{
         ISignatureTransfer, PermitBatchTransferFrom, PermitTransferFrom, SignatureTransferDetails,
@@ -14,8 +16,6 @@ pub mod SignatureTransferComponent {
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use openzeppelin_utils::cryptography::snip12::{OffchainMessageHash, SNIP12Metadata};
     use starknet::ContractAddress;
-
-    /// COMPONENTS ///
 
     /// STORAGE ///
 
@@ -84,7 +84,7 @@ pub mod SignatureTransferComponent {
                     permit,
                     transfer_details,
                     owner,
-                    permit.hash_with_witness(witness, witness_type_string),
+                    permit.get_message_hash_with_witness(owner, witness, witness_type_string),
                     signature,
                 );
         }
@@ -103,7 +103,7 @@ pub mod SignatureTransferComponent {
                     permit,
                     transfer_details,
                     owner,
-                    permit.hash_with_witness(witness, witness_type_string),
+                    permit.get_message_hash_with_witness(owner, witness, witness_type_string),
                     signature,
                 );
         }

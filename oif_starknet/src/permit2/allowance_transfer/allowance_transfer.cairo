@@ -2,12 +2,12 @@
 pub mod AllowanceTransferComponent {
     use core::num::traits::Bounded;
     use oif_starknet::libraries::allowance::AllowanceTrait;
+    use oif_starknet::libraries::permit_hash::{
+        PermitBatchStructHash, PermitDetailsStructHash, PermitSingleStructHash,
+    };
     use oif_starknet::permit2::allowance_transfer::interface::{
         Allowance, AllowanceTransferDetails, IAllowanceTransfer, PermitBatch, PermitDetails,
         PermitSingle, TokenSpenderPair, errors, events,
-    };
-    use oif_starknet::permit2::allowance_transfer::snip12_utils::{
-        PermitBatchStructHash, PermitDetailsStructHash, PermitSingleStructHash,
     };
     use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
@@ -64,8 +64,8 @@ pub mod AllowanceTransferComponent {
             expiration: u64,
         ) {
             let owner = starknet::get_caller_address();
-            let mut allowed = self.allowance.entry((owner, token, spender));
-            allowed.update_amount_and_expiration(amount, expiration);
+            let mut allowance = self.allowance.entry((owner, token, spender));
+            allowance.update_amount_and_expiration(amount, expiration);
             self
                 .emit(
                     events::AllowanceTransferEvent::Approval(

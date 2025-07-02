@@ -1,12 +1,12 @@
 #[starknet::component]
 pub mod SignatureTransferComponent {
+    use oif_starknet::libraries::permit_hash::{
+        PermitBatchStructHash, PermitSingleStructHash, StructHashPermitBatchTransferFrom,
+        StructHashPermitTransferFrom, StructHashWitnessTrait, TokenPermissionsStructHash,
+    };
     use oif_starknet::permit2::signature_transfer::interface::{
         ISignatureTransfer, PermitBatchTransferFrom, PermitTransferFrom, SignatureTransferDetails,
         errors, events,
-    };
-    use oif_starknet::permit2::signature_transfer::snip12_utils::{
-        StructHashPermitBatchTransferFrom, StructHashPermitTransferFrom, StructHashWitnessTrait,
-        TokenPermissionsStructHash,
     };
     use oif_starknet::permit2::unordered_nonces::unordered_nonces::UnorderedNoncesComponent;
     use oif_starknet::permit2::unordered_nonces::unordered_nonces::UnorderedNoncesComponent::InternalTrait as NoncesInternalTrait;

@@ -62,6 +62,7 @@ pub mod UnorderedNoncesComponent {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
 
+
     #[storage]
     pub struct Storage {
         nonces_bitmap: Map<(ContractAddress, felt252), felt252>,
@@ -154,9 +155,11 @@ pub mod UnorderedNoncesComponent {
 //#[cfg(test)]
 //pub mod unordered_nonces_unit_tests {
 //    use core::num::traits::{Bounded, Pow};
+//    use oif_starknet::libraries::bitmap::{BitmapPackingTrait, BitmapTrait};
+//    use oif_starknet::permit2::unordered_nonces::interface::IUnorderedNonces;
 //    use starknet::ContractAddress;
 //    use starknet::storage::{
-//        Mutable, StoragePath, StoragePathEntry, StoragePointerReadAccess,
+//        Map, Mutable, StorageBase, StoragePath, StoragePathEntry, StoragePointerReadAccess,
 //        StoragePointerWriteAccess,
 //    };
 //    use super::UnorderedNoncesComponent;
@@ -178,22 +181,35 @@ pub mod UnorderedNoncesComponent {
 //    #[starknet::contract]
 //    mod contract_with_unordered_nonces {
 //        use super::super::UnorderedNoncesComponent;
+//
 //        #[storage]
 //        pub struct Storage {
 //            pub unordered_nonces: UnorderedNoncesComponent::Storage,
 //        }
 //    }
 //
-//    fn setup() -> StoragePath<Mutable<UnorderedNoncesComponent>> {
+//    #[event]
+//    #[derive(Drop, starknet::Event)]
+//    enum Event {
+//        CounterEvent: CounterComponent::Event,
+//    }
+//
+//    #[abi(embed_v0)]
+//    impl CounterImpl = CounterComponent::CounterImpl<ContractState>;
+//}
+//
+//    //        nonces_bitmap: Map<(ContractAddress, felt252), felt252>,
+//
+//    fn setup() -> StorageBase<Mutable<UnorderedNoncesComponent::Storage>> {
 //        let mut contract_state = contract_with_unordered_nonces::contract_state_for_testing();
 //        contract_state.unordered_nonces
 //    }
 //
 //    // Test: Nonce should be usable initially
 //    fn test_is_nonce_usable_initial() {
-//        let mut storage = setup();
-//        let nonce = UnorderedNoncesComponent::pack_nonce(NONCE_SPACE(), BIT_POS());
-//        let usable = storage.is_nonce_usable(OWNER(), nonce);
+//        let mut contract = setup();
+//        let nonce = BitmapPackingTrait::pack_nonce(NONCE_SPACE(), BIT_POS());
+//        let usable = contract.is_nonce_usable(OWNER(), nonce);
 //        assert(usable, 'Nonce should be usable initially');
 //    }
 //

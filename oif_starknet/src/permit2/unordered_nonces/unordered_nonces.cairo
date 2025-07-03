@@ -55,16 +55,12 @@
 //! - **Querying availability of nonces**: Functions to determine if a given nonce is usable or not.
 #[starknet::component]
 pub mod UnorderedNoncesComponent {
-    use oif_starknet::permit2::unordered_nonces::interface::{
-        BitmapTrait, IUnorderedNonces, errors, events,
-    };
+    use oif_starknet::libraries::bitmap::{BitmapPackingTrait, BitmapTrait};
+    use oif_starknet::permit2::unordered_nonces::interface::{IUnorderedNonces, errors, events};
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
-
-    const MASK_8: u256 = 0xFF;
-    const SHIFT_8: u256 = 0x100000000;
 
     #[storage]
     pub struct Storage {
@@ -86,32 +82,7 @@ pub mod UnorderedNoncesComponent {
     > of IUnorderedNonces<ComponentState<TContractState>> {
         /// Read ///
 
-        /// Determines if nonce is usable.
-        ///
-        /// Parameters:
-        ///
-        /// - 'owner': address to query nonce for.
-        /// - 'nonce': nonce to determine if it is usable or not.
-        ///
-        /// Returns 'true' if the nonce is usable for the given nonce space.
-        fn is_nonce_usable(
-            self: @ComponentState<TContractState>, owner: ContractAddress, nonce: felt252,
-        ) -> bool {
-            let (nonce_space, bit_pos) = bitmap_positions(nonce);
-            let bitmap = self.nonces_bitmap.entry((owner, nonce_space)).read();
-            !BitmapTrait::get(bitmap, bit_pos.into())
-        }
-
         /// Returns `felt252` representing the nonce bitmap in the given `nonce_space`.
-        fn get_nonce_space(
-            self: @ComponentState<TContractState>, owner: ContractAddress, nonce_space: felt252,
-        ) -> felt252 {
-            self.nonces_bitmap.entry((owner, nonce_space)).read()
-        }
-
-        /// Returns `felt252` representing the nonce bitmap in the given `nonce_space`.
-        /// NOTE: This function is the same as `get_nonce_space`; this one is defined here:
-        /// https://github.com/Uniswap/permit2/blob/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219/src/interfaces/ISignatureTransfer.sol#L65
         fn nonce_bitmap(
             self: @ComponentState<TContractState>, owner: ContractAddress, nonce_space: felt252,
         ) -> felt252 {
@@ -119,23 +90,16 @@ pub mod UnorderedNoncesComponent {
         }
 
 
+        fn is_nonce_usable(
+            self: @ComponentState<TContractState>, owner: ContractAddress, nonce: felt252,
+        ) -> bool {
+            let (nonce_space, bit_pos) = BitmapPackingTrait::unpack_nonce(nonce);
+            let bitmap = self.nonces_bitmap.entry((owner, nonce_space)).read();
+            !BitmapTrait::get(bitmap, bit_pos.into())
+        }
+
         /// Write ///
 
-        /// Invalidates nonces in the given 'nonce_space' for the 'caller'. Nonces to invalidate are
-        /// represented as a bitmask.
-        ///
-        /// For example:
-        ///
-        /// If the first 16 bits are set, it invalidates nonces [0, 16].
-        ///
-        /// Mask = 0xFFFF
-        ///
-        /// Max(felt252) to invalidate all nonces in the nonce_space at once.
-        ///
-        /// Parameters:
-        ///
-        /// - 'nonce_space': nonce_space from which to revoke nonces.
-        /// - 'mask': mask that represents nonces to invalidate.
         fn invalidate_unordered_nonces(
             ref self: ComponentState<TContractState>, nonce_space: felt252, mask: felt252,
         ) {
@@ -155,22 +119,6 @@ pub mod UnorderedNoncesComponent {
         }
     }
 
-    /// Unpacks `felt252` into nonce space and bit position.
-    pub fn bitmap_positions(nonce: felt252) -> (felt252, u8) {
-        let nonce_u256: u256 = nonce.into();
-        let bit_pos: u8 = (nonce_u256 & MASK_8).try_into().unwrap();
-        let nonce_space = (nonce_u256 / SHIFT_8).try_into().unwrap();
-        (nonce_space, bit_pos)
-    }
-
-    /// Packs the `nonce_space` and `bit_pos` into `felt252`
-    pub fn pack_nonce(nonce_space: felt252, bit_pos: u8) -> felt252 {
-        let nonce_space_u256: u256 = nonce_space.into();
-        ((nonce_space_u256 * SHIFT_8) + bit_pos.into())
-            .try_into()
-            .expect('pack_nonce: felt252 overflow')
-    }
-
     #[generate_trait]
     pub impl InternalImpl<
         TContractState, +HasComponent<TContractState>, +Drop<TContractState>,
@@ -185,12 +133,15 @@ pub mod UnorderedNoncesComponent {
         fn _use_unordered_nonce(
             ref self: ComponentState<TContractState>, owner: ContractAddress, nonce: felt252,
         ) {
-            let (nonce_space, bit_pos) = bitmap_positions(nonce);
+            let (nonce_space, bit_pos) = BitmapPackingTrait::unpack_nonce(nonce);
             let bitmap_storage = self.nonces_bitmap.entry((owner, nonce_space));
             let mut bitmap = bitmap_storage.read();
+
             assert(!BitmapTrait::get(bitmap, bit_pos.into()), errors::NONCE_ALREADY_INVALIDATED);
+
             BitmapTrait::set(ref bitmap, bit_pos.into());
             bitmap_storage.write(bitmap);
+
             self
                 .emit(
                     events::UnorderedNonceEvent::NonceInvalidated(
@@ -200,3 +151,104 @@ pub mod UnorderedNoncesComponent {
         }
     }
 }
+//#[cfg(test)]
+//pub mod unordered_nonces_unit_tests {
+//    use core::num::traits::{Bounded, Pow};
+//    use starknet::ContractAddress;
+//    use starknet::storage::{
+//        Mutable, StoragePath, StoragePathEntry, StoragePointerReadAccess,
+//        StoragePointerWriteAccess,
+//    };
+//    use super::UnorderedNoncesComponent;
+//    use super::UnorderedNoncesComponent::{InternalImpl, UnorderedNoncesImpl};
+//
+//    fn OWNER() -> ContractAddress {
+//        'OWNER'.try_into().unwrap()
+//    }
+//    fn NONCE_SPACE() -> felt252 {
+//        42
+//    }
+//    fn BIT_POS() -> u8 {
+//        7
+//    }
+//    fn ANOTHER_BIT_POS() -> u8 {
+//        8
+//    }
+//
+//    #[starknet::contract]
+//    mod contract_with_unordered_nonces {
+//        use super::super::UnorderedNoncesComponent;
+//        #[storage]
+//        pub struct Storage {
+//            pub unordered_nonces: UnorderedNoncesComponent::Storage,
+//        }
+//    }
+//
+//    fn setup() -> StoragePath<Mutable<UnorderedNoncesComponent>> {
+//        let mut contract_state = contract_with_unordered_nonces::contract_state_for_testing();
+//        contract_state.unordered_nonces
+//    }
+//
+//    // Test: Nonce should be usable initially
+//    fn test_is_nonce_usable_initial() {
+//        let mut storage = setup();
+//        let nonce = UnorderedNoncesComponent::pack_nonce(NONCE_SPACE(), BIT_POS());
+//        let usable = storage.is_nonce_usable(OWNER(), nonce);
+//        assert(usable, 'Nonce should be usable initially');
+//    }
+//
+//    // Test: Invalidate a nonce and check usability
+//    fn test_invalidate_unordered_nonces_and_check() {
+//        let mut storage = setup();
+//        let nonce = UnorderedNoncesComponent::pack_nonce(NONCE_SPACE(), BIT_POS());
+//        let mask: felt252 = Pow::pow(2_u256, BIT_POS().into()).try_into().unwrap();
+//        storage.invalidate_unordered_nonces(NONCE_SPACE(), mask);
+//        let usable = storage.is_nonce_usable(OWNER(), nonce);
+//        assert(!usable, 'Nonce should not be usable after invalidation');
+//    }
+//
+//    // Test: get_nonce_space and nonce_bitmap should match
+//    fn test_get_nonce_space_and_nonce_bitmap() {
+//        let mut storage = setup();
+//        let mask: felt252 = Pow::pow(2_u256, BIT_POS().into()).try_into().unwrap();
+//        storage.invalidate_unordered_nonces(NONCE_SPACE(), mask);
+//        let bitmap1 = storage.get_nonce_space(OWNER(), NONCE_SPACE());
+//        let bitmap2 = storage.nonce_bitmap(OWNER(), NONCE_SPACE());
+//        assert(bitmap1 == bitmap2, 'get_nonce_space and nonce_bitmap should match');
+//        assert((bitmap1 & mask) == mask, 'Bitmap should have the bit set');
+//    }
+//
+//    // Test: bitmap_positions and pack_nonce roundtrip
+//    fn test_bitmap_positions_and_pack_nonce() {
+//        let nonce = UnorderedNoncesComponent::pack_nonce(NONCE_SPACE(), BIT_POS());
+//        let (space, pos) = UnorderedNoncesComponent::bitmap_positions(nonce);
+//        assert(space == NONCE_SPACE(), 'Nonce space should match');
+//        assert(pos == BIT_POS(), 'Bit position should match');
+//    }
+//
+//    // Test: Internal use of nonce
+//    fn test_use_unordered_nonce_internal() {
+//        let mut storage = setup();
+//        let nonce = UnorderedNoncesComponent::pack_nonce(NONCE_SPACE(), BIT_POS());
+//        storage._use_unordered_nonce(OWNER(), nonce);
+//        let usable = storage.is_nonce_usable(OWNER(), nonce);
+//        assert(!usable, 'Nonce should not be usable after _use_unordered_nonce');
+//    }
+//
+//    // Test: Invalidate multiple nonces
+//    fn test_invalidate_multiple_nonces() {
+//        let mut storage = setup();
+//        let nonce1 = UnorderedNoncesComponent::pack_nonce(NONCE_SPACE(), BIT_POS());
+//        let nonce2 = UnorderedNoncesComponent::pack_nonce(NONCE_SPACE(), ANOTHER_BIT_POS());
+//        let mask: felt252 = (Pow::pow(2_u256, BIT_POS().into())
+//            + Pow::pow(2_u256, ANOTHER_BIT_POS().into()))
+//            .try_into()
+//            .unwrap();
+//        storage.invalidate_unordered_nonces(NONCE_SPACE(), mask);
+//        assert(!storage.is_nonce_usable(OWNER(), nonce1), 'First nonce should be invalidated');
+//        assert(!storage.is_nonce_usable(OWNER(), nonce2), 'Second nonce should be invalidated');
+//    }
+//}
+//
+
+

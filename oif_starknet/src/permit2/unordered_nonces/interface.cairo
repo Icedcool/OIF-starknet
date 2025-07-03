@@ -14,6 +14,7 @@ pub mod events {
     /// Emitted when one or multiple nonces are invalidated.
     #[derive(Drop, starknet::Event)]
     pub struct UnorderedNonceInvalidation {
+        #[key]
         pub owner: ContractAddress,
         pub nonce_space: felt252,
         pub mask: felt252,

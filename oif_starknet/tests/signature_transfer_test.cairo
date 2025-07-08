@@ -1,4 +1,3 @@
-use core::num::traits::Bounded;
 use oif_starknet::libraries::bitmap::BitmapPackingTrait;
 use oif_starknet::libraries::permit_hash::{
     OffchainMessageHashWitnessTrait, PermitBatchStructHash, PermitSingleStructHash,
@@ -10,69 +9,25 @@ use oif_starknet::mocks::mock_erc20::{IMintableDispatcher, IMintableDispatcherTr
 use oif_starknet::mocks::mock_types::{Beta, ExampleWitness, Zeta, _EXAMPLE_WITNESS_TYPE_STRING};
 use oif_starknet::permit2::permit2::Permit2::SNIP12MetadataImpl;
 use oif_starknet::permit2::signature_transfer::interface::{
-    ISignatureTransferDispatcher, ISignatureTransferDispatcherTrait, PermitBatchTransferFrom,
-    PermitTransferFrom, SignatureTransferDetails, TokenPermissions,
+    ISignatureTransferDispatcherTrait, PermitBatchTransferFrom, PermitTransferFrom,
+    SignatureTransferDetails, TokenPermissions,
 };
-use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+use openzeppelin_token::erc20::interface::IERC20DispatcherTrait;
 use openzeppelin_utils::cryptography::snip12::OffchainMessageHash;
 use snforge_std::signature::SignerTrait;
 use snforge_std::signature::stark_curve::StarkCurveSignerImpl;
 use snforge_std::{
-    ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
-    start_cheat_caller_address_global, stop_cheat_caller_address, stop_cheat_caller_address_global,
+    EventSpyAssertionsTrait, spy_events, start_cheat_block_timestamp, start_cheat_caller_address,
+    start_cheat_caller_address_global, stop_cheat_block_timestamp, stop_cheat_caller_address,
+    stop_cheat_caller_address_global,
 };
-use starknet::{ContractAddress, get_block_timestamp};
-use crate::common::{Account, E18, INITIAL_SUPPLY, create_erc20_token, generate_account};
+use starknet::get_block_timestamp;
+use crate::common::E18;
+use crate::setup::setupST as setup;
 
 
 pub const DEFAULT_AMOUNT: u256 = E18;
 
-
-#[derive(Drop, Copy)]
-pub struct Setup {
-    from: Account,
-    to: Account,
-    owner: ContractAddress,
-    bystander: ContractAddress,
-    token0: IERC20Dispatcher,
-    token1: IERC20Dispatcher,
-    permit2: ISignatureTransferDispatcher,
-}
-
-fn setup() -> Setup {
-    // Deploy permit2
-    let permit2_contract = declare("Permit2").unwrap().contract_class();
-    let (permit2_address, _) = permit2_contract
-        .deploy(@array![])
-        .expect('permit2 deployment failed');
-    let permit2 = ISignatureTransferDispatcher { contract_address: permit2_address };
-
-    // Create accounts
-    let from = generate_account();
-    let to = generate_account();
-    let owner = 'owner'.try_into().unwrap();
-    let bystander = 'bystander'.try_into().unwrap();
-    // doesnt get balance ?
-    //let address_with_balance = 'ADDRESS_WITH_BALANCE'.try_into().unwrap();
-
-    // Deploy 2 erc20 tokens
-    let token0 = create_erc20_token("Token 0", "TKN0", INITIAL_SUPPLY, bystander, owner);
-    let token1 = create_erc20_token("Token 1", "TKN1", INITIAL_SUPPLY, bystander, owner);
-
-    // The `bystander` tops up the `from` account with tokens
-    start_cheat_caller_address_global(bystander);
-    token0.transfer(from.account.contract_address, 100 * E18);
-    token1.transfer(from.account.contract_address, 100 * E18);
-    stop_cheat_caller_address_global();
-
-    // Approve permit2 to transfer `from`s tokens
-    start_cheat_caller_address_global(from.account.contract_address);
-    token0.approve(permit2_address, Bounded::MAX);
-    token1.approve(permit2_address, Bounded::MAX);
-    stop_cheat_caller_address_global();
-
-    Setup { from, to, owner, bystander, token0, token1, permit2 }
-}
 
 #[test]
 fn test_permit_transfer_from() {

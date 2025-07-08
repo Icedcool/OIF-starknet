@@ -42,3 +42,4 @@ pub fn generate_account() -> Account {
     let account = AccountABIDispatcher { contract_address: account_address };
     Account { account, key_pair }
 }
+

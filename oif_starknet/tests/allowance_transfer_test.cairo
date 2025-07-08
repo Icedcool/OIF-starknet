@@ -3,103 +3,31 @@ use oif_starknet::libraries::permit_hash::{
     PermitBatchStructHash, PermitDetailsStructHash, PermitSingleStructHash,
 };
 use oif_starknet::permit2::allowance_transfer::interface::{
-    AllowanceTransferDetails, IAllowanceTransferDispatcher, IAllowanceTransferDispatcherTrait,
-    PermitBatch, PermitDetails, PermitSingle, TokenSpenderPair, events,
+    AllowanceTransferDetails, IAllowanceTransferDispatcherTrait, PermitBatch, PermitDetails,
+    PermitSingle, TokenSpenderPair, events,
 };
 use oif_starknet::permit2::permit2::Permit2::SNIP12MetadataImpl;
 use openzeppelin_token::erc20::ERC20Component;
-use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+use openzeppelin_token::erc20::interface::IERC20DispatcherTrait;
 use openzeppelin_utils::cryptography::snip12::OffchainMessageHash;
 use snforge_std::signature::SignerTrait;
 use snforge_std::signature::stark_curve::{
     StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl,
 };
 use snforge_std::{
-    ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
-    start_cheat_block_timestamp, start_cheat_caller_address, start_cheat_caller_address_global,
-    stop_cheat_block_timestamp, stop_cheat_caller_address, stop_cheat_caller_address_global,
+    EventSpyAssertionsTrait, spy_events, start_cheat_block_timestamp, start_cheat_caller_address,
+    stop_cheat_block_timestamp, stop_cheat_caller_address,
 };
-use starknet::{ContractAddress, get_block_timestamp};
-use crate::common::{Account, E18, INITIAL_SUPPLY, create_erc20_token, generate_account};
+use starknet::get_block_timestamp;
+use crate::common::E18;
+use crate::setup::setupAT as setup;
+
 
 const DEFAULT_AMOUNT: u256 = 30 * E18;
 const DEFAULT_NONCE: u64 = 0;
 
 /////////// TODO: CHECK EVENTS ON SIGNATURE TRANSFER FROM ////////////////
 // test using nonce 1 at start
-
-#[derive(Drop, Copy)]
-pub struct Setup {
-    from: Account,
-    to: Account,
-    owner: ContractAddress,
-    bystander: ContractAddress,
-    token0: IERC20Dispatcher,
-    token1: IERC20Dispatcher,
-    permit2: IAllowanceTransferDispatcher,
-}
-
-fn setup() -> Setup {
-    // Deploy permit2
-    let permit2_contract = declare("Permit2").unwrap().contract_class();
-    let (permit2_address, _) = permit2_contract
-        .deploy(@array![])
-        .expect('permit2 deployment failed');
-    let permit2 = IAllowanceTransferDispatcher { contract_address: permit2_address };
-
-    // Create accounts
-    let from = generate_account();
-    let to = generate_account();
-    let owner = 'owner'.try_into().unwrap();
-    let bystander = 'bystander'.try_into().unwrap();
-
-    // Deploy 2 erc20 tokens
-    let token0 = create_erc20_token("Token 0", "TKN0", INITIAL_SUPPLY, bystander, owner);
-    let token1 = create_erc20_token("Token 1", "TKN1", INITIAL_SUPPLY, bystander, owner);
-
-    // The `bystander` tops up the accounts with tokens
-    start_cheat_caller_address_global(bystander);
-    for addr in array![
-        from.account.contract_address, to.account.contract_address, owner, bystander,
-    ] {
-        token0.transfer(addr, 100 * E18);
-        token1.transfer(addr, 100 * E18);
-    }
-    stop_cheat_caller_address_global();
-
-    // Approve permit2 to transfer `from`s tokens
-    start_cheat_caller_address_global(from.account.contract_address);
-    token0.approve(permit2_address, Bounded::MAX);
-    token1.approve(permit2_address, Bounded::MAX);
-    stop_cheat_caller_address_global();
-
-    start_cheat_caller_address_global(to.account.contract_address);
-    token0.approve(permit2_address, Bounded::MAX);
-    token1.approve(permit2_address, Bounded::MAX);
-    /// TODO: Might not be necessary if warm storage slot does not matter, seems like solidity has
-    /// for benchmarking.
-    //permit2.invalidate_nonces(token0.contract_address, starknet::get_contract_address(), 1);
-    //permit2.invalidate_nonces(token1.contract_address, starknet::get_contract_address(), 1);
-    stop_cheat_caller_address_global();
-
-    Setup { from, to, owner, bystander, token0, token1, permit2 }
-}
-
-//
-//#[test]
-//#[ignore]
-//fn test_should_set_allowance_dirty_write() {}
-//
-//// Account Abstraction
-////#[test]
-////#[ignore]
-////fn test_should_set_allowance_compact_sig() {}
-//
-//// Account Abstraction
-////#[test]
-////#[ignore]
-////fn test_should_set_allowance_incorrect_sig_length() {}
-//
 
 #[test]
 fn test_approve_sets_allowance() {
@@ -785,7 +713,7 @@ fn test_permit_batch_allowance_transfer_different_tokens() {
 }
 
 #[test]
-#[should_panic(expect: 'InvalidSignature')]
+#[should_panic(expected: 'AT: invalid signature')]
 fn test_permit_with_invalid_signature_should_fail() {
     let setup = setup();
     let default_expiration = starknet::get_block_timestamp() + 5;
@@ -810,7 +738,7 @@ fn test_permit_with_invalid_signature_should_fail() {
 }
 
 #[test]
-#[should_panic(expect: 'SignatureExpired')]
+#[should_panic(expected: 'AT: signature expired')]
 fn test_permit_when_deadline_passed_should_panic() {
     let setup = setup();
     let default_expiration = get_block_timestamp() + 5;
@@ -1088,7 +1016,7 @@ fn test_invalidate_multiple_nonces_and_events() {
 }
 
 #[test]
-#[should_panic(expect: 'InvalidNonce')]
+#[should_panic(expected: 'AT: invalid nonce')]
 fn test_invalidate_already_used_nonce_should_panic() {
     let setup = setup();
 
@@ -1100,7 +1028,7 @@ fn test_invalidate_already_used_nonce_should_panic() {
 }
 
 #[test]
-#[should_panic(expect: 'InvalidNonce')]
+#[should_panic(expected: 'AT: invalid nonce')]
 fn test_invalidate_already_used_nonce_should_panic2() {
     let setup = setup();
 
@@ -1112,7 +1040,7 @@ fn test_invalidate_already_used_nonce_should_panic2() {
 }
 
 #[test]
-#[should_panic(expect: 'InvalidNonce')]
+#[should_panic(expected: 'AT: invalid nonce')]
 fn test_must_use_current_nonce() {
     let setup = setup();
     let default_expiration = get_block_timestamp() + 5;
@@ -1141,7 +1069,7 @@ fn test_must_use_current_nonce() {
 }
 
 #[test]
-#[should_panic(expect: 'ExcessiveInvalidation')]
+#[should_panic(expected: 'AT: excessive nonce delta')]
 fn test_invalidating_excessive_amount_of_nonces_should_panic() {
     let setup = setup();
 
@@ -1411,4 +1339,101 @@ fn test_lockdown() {
             ],
         );
 }
+
+//// Account Abstraction
+#[test]
+#[should_panic(expected: 'AT: invalid signature')]
+fn test_permit_incorrect_sig_length_should_panic() {
+    let setup = setup();
+    let default_expiration = get_block_timestamp() + 5;
+
+    let details = PermitDetails {
+        token: setup.token0.contract_address,
+        amount: DEFAULT_AMOUNT,
+        expiration: default_expiration,
+        nonce: DEFAULT_NONCE,
+    };
+    let permit = PermitSingle {
+        details, spender: setup.bystander, sig_deadline: (get_block_timestamp() + 100).into(),
+    };
+
+    // Hash the permit message
+    let message_hash = permit.get_message_hash(setup.from.account.contract_address);
+    // Mess with sig length
+    let (r, s): (felt252, felt252) = setup.from.key_pair.sign(message_hash).unwrap();
+    let signature = array![r, s, 0]; // Add an extra element to make it invalid
+
+    // Bystander uses permit to approve bystander to spend `DEFAULT_AMOUNT` of `token0` on `from`s
+    // behalf
+    start_cheat_caller_address(setup.permit2.contract_address, setup.bystander);
+    setup.permit2.permit(setup.from.account.contract_address, permit, signature);
+    stop_cheat_caller_address(setup.permit2.contract_address);
+}
+
+#[test]
+#[should_panic(expected: 'AT: invalid signature')]
+fn test_permit_incorrect_sig_length_should_panic2() {
+    let setup = setup();
+    let default_expiration = get_block_timestamp() + 5;
+
+    let details = PermitDetails {
+        token: setup.token0.contract_address,
+        amount: DEFAULT_AMOUNT,
+        expiration: default_expiration,
+        nonce: DEFAULT_NONCE,
+    };
+    let permit = PermitSingle {
+        details, spender: setup.bystander, sig_deadline: (get_block_timestamp() + 100).into(),
+    };
+
+    // Hash the permit message
+    let message_hash = permit.get_message_hash(setup.from.account.contract_address);
+    // Mess with sig length
+    let (r, _): (felt252, felt252) = setup.from.key_pair.sign(message_hash).unwrap();
+    let signature = array![r]; // Add an extra element to make it invalid
+
+    // Bystander uses permit to approve bystander to spend `DEFAULT_AMOUNT` of `token0` on `from`s
+    // behalf
+    start_cheat_caller_address(setup.permit2.contract_address, setup.bystander);
+    setup.permit2.permit(setup.from.account.contract_address, permit, signature);
+    stop_cheat_caller_address(setup.permit2.contract_address);
+}
+
+#[test]
+#[should_panic(expected: 'AT: invalid signature')]
+fn test_permit_incorrect_owner_should_panic() {
+    let setup = setup();
+    let default_expiration = get_block_timestamp() + 5;
+
+    let details = PermitDetails {
+        token: setup.token0.contract_address,
+        amount: DEFAULT_AMOUNT,
+        expiration: default_expiration,
+        nonce: DEFAULT_NONCE,
+    };
+    let permit = PermitSingle {
+        details,
+        spender: setup.to.account.contract_address,
+        sig_deadline: (get_block_timestamp() + 100).into(),
+    };
+
+    // Hash the permit message
+    let message_hash = permit.get_message_hash(setup.from.account.contract_address);
+    // Mess with sig length
+    let (r, s): (felt252, felt252) = setup.from.key_pair.sign(message_hash).unwrap();
+    let signature = array![r, s, 0]; // Add an extra element to make it invalid
+
+    // Bystander tries to use the permit signed for `to`
+    start_cheat_caller_address(setup.permit2.contract_address, setup.bystander);
+    setup.permit2.permit(setup.from.account.contract_address, permit, signature);
+    stop_cheat_caller_address(setup.permit2.contract_address);
+}
+// #[test]
+// #[ignore]
+// fn test_should_set_allowance_compact_sig() {}
+//
+// #[test]
+// #[ignore]
+// fn test_should_set_allowance_dirty_write() {}
+
 

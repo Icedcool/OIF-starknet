@@ -1,3 +1,54 @@
+use starknet::ContractAddress;
+
+/// INTERFACE ///
+
+#[starknet::interface]
+pub trait IUnorderedNonces<TState> {
+    /// Read ///
+
+    /// @notice A map from token owner address and a caller specified nonce_space to a bitmap. Used
+    /// to set bits in the bitmap to prevent against signature replay protection
+    /// @dev Uses unordered nonces so that permit messages do not need to be spent in a certain
+    /// order
+    /// @dev The mapping is indexed first by the token owner, then by a nonce_space specified in
+    /// the nonce
+    /// @dev It returns a felt252 bitmap
+    /// @dev The nonce_space, or wordPosition is capped at
+    /// type(uint244).max
+    fn nonce_bitmap(self: @TState, owner: ContractAddress, nonce_space: felt252) -> felt252;
+
+    /// Determines if nonce is usable.
+    ///
+    /// Parameters:
+    ///
+    /// - 'owner': address to query nonce for.
+    /// - 'nonce': nonce to determine if it is usable or not.
+    ///
+    /// Returns 'true' if the nonce is usable for the given nonce space.
+    fn is_nonce_usable(self: @TState, owner: ContractAddress, nonce: felt252) -> bool;
+
+    /// Write ///
+
+    /// Invalidates nonces in the given 'nonce_space' for the 'caller'. Nonces to invalidate are
+    /// represented as a bitmask.
+    ///
+    /// For example:
+    ///
+    /// If the first 16 bits are set, it invalidates nonces [0, 16].
+    ///
+    /// Mask = 0xFFFF
+    ///
+    /// Max(felt252) to invalidate all nonces in the nonce_space at once.
+    ///
+    /// Parameters:
+    ///
+    /// - 'nonce_space': nonce_space from which to revoke nonces.
+    /// - 'mask': mask that represents nonces to invalidate.
+    fn invalidate_unordered_nonces(ref self: TState, nonce_space: felt252, mask: felt252);
+}
+
+/// COMPONENT ///
+
 //! The `UnorderedNoncesComponent` is designed for concurrent usage of nonces.
 //!
 //! Nonces are represented in this component as a mapping from an owner and nonce space to a bitmap
@@ -56,12 +107,20 @@
 #[starknet::component]
 pub mod UnorderedNoncesComponent {
     use oif_starknet::libraries::bitmap::{BitmapPackingTrait, BitmapTrait};
-    use oif_starknet::permit2::unordered_nonces::interface::{IUnorderedNonces, errors, events};
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
+    use super::IUnorderedNonces;
 
+    /// ERRORS ///
+
+    pub mod Error {
+        pub const NONCE_ALREADY_INVALIDATED: felt252 = 'Nonce already invalidated';
+    }
+
+
+    /// STORAGE ///
 
     #[storage]
     pub struct Storage {
@@ -69,11 +128,29 @@ pub mod UnorderedNoncesComponent {
     }
 
     /// EVENTS ///
+
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
-        #[flat]
-        UnorderedNonceEvent: events::UnorderedNonceEvent,
+        UnorderedNonceInvalidation: UnorderedNonceInvalidation,
+        NonceInvalidated: NonceInvalidated,
+    }
+
+    /// Emitted when a single nonce is invalidated.
+    #[derive(Drop, starknet::Event)]
+    pub struct NonceInvalidated {
+        #[key]
+        pub owner: ContractAddress,
+        pub nonce: felt252,
+    }
+
+    /// Emitted when one or multiple nonces are invalidated.
+    #[derive(Drop, starknet::Event)]
+    pub struct UnorderedNonceInvalidation {
+        #[key]
+        pub owner: ContractAddress,
+        pub nonce_space: felt252,
+        pub mask: felt252,
     }
 
 
@@ -111,12 +188,7 @@ pub mod UnorderedNoncesComponent {
             let new_bitmap = (bitmap.into() | mask_u256).try_into().unwrap();
             bitmap_storage.write(new_bitmap);
 
-            self
-                .emit(
-                    events::UnorderedNonceEvent::UnorderedNonceInvalidation(
-                        events::UnorderedNonceInvalidation { owner: caller, nonce_space, mask },
-                    ),
-                );
+            self.emit(UnorderedNonceInvalidation { owner: caller, nonce_space, mask });
         }
     }
 
@@ -138,17 +210,12 @@ pub mod UnorderedNoncesComponent {
             let bitmap_storage = self.nonces_bitmap.entry((owner, nonce_space));
             let mut bitmap = bitmap_storage.read();
 
-            assert(!BitmapTrait::get(bitmap, bit_pos.into()), errors::NONCE_ALREADY_INVALIDATED);
+            assert(!BitmapTrait::get(bitmap, bit_pos.into()), Error::NONCE_ALREADY_INVALIDATED);
 
             BitmapTrait::set(ref bitmap, bit_pos.into());
             bitmap_storage.write(bitmap);
 
-            self
-                .emit(
-                    events::UnorderedNonceEvent::NonceInvalidated(
-                        events::NonceInvalidated { owner, nonce },
-                    ),
-                );
+            self.emit(NonceInvalidated { owner, nonce });
         }
     }
 }

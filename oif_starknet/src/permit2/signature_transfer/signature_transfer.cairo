@@ -6,13 +6,13 @@ pub mod SignatureTransferComponent {
         StructHashWitnessPermitBatchTransferFrom, StructHashWitnessPermitTransferFrom,
         TokenPermissionsStructHash,
     };
+    use oif_starknet::libraries::unordered_nonces::UnorderedNoncesComponent;
+    use oif_starknet::libraries::unordered_nonces::UnorderedNoncesComponent::{
+        InternalTrait as NoncesInternalTrait, UnorderedNoncesImpl,
+    };
     use oif_starknet::permit2::signature_transfer::interface::{
         ISignatureTransfer, PermitBatchTransferFrom, PermitTransferFrom, SignatureTransferDetails,
         errors,
-    };
-    use oif_starknet::permit2::unordered_nonces::unordered_nonces::UnorderedNoncesComponent;
-    use oif_starknet::permit2::unordered_nonces::unordered_nonces::UnorderedNoncesComponent::{
-        InternalTrait as NoncesInternalTrait, UnorderedNoncesImpl,
     };
     use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};

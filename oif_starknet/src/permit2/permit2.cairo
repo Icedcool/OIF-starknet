@@ -1,8 +1,8 @@
 #[starknet::contract]
 pub mod Permit2 {
+    use oif_starknet::libraries::unordered_nonces::UnorderedNoncesComponent;
     use oif_starknet::permit2::allowance_transfer::allowance_transfer::AllowanceTransferComponent;
     use oif_starknet::permit2::signature_transfer::signature_transfer::SignatureTransferComponent;
-    use oif_starknet::permit2::unordered_nonces::unordered_nonces::UnorderedNoncesComponent;
     use openzeppelin_utils::cryptography::snip12::SNIP12Metadata;
 
     component!(

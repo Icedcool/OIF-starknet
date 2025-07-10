@@ -5,7 +5,7 @@ use oif_starknet::libraries::permit_hash::{
     PermitTransferFromStructHashWitness, TokenPermissionsStructHash,
 };
 use oif_starknet::mocks::mock_erc20::{IMintableDispatcher, IMintableDispatcherTrait};
-use oif_starknet::mocks::mock_witness::{Beta, ExampleWitness, Zeta, _EXAMPLE_WITNESS_TYPE_STRING};
+use oif_starknet::mocks::mock_witness::{Beta, MyWitness, Zeta, _MY_WITNESS_TYPE_STRING};
 use oif_starknet::permit2::permit2::Permit2::SNIP12MetadataImpl;
 use oif_starknet::permit2::signature_transfer::interface::{
     ISignatureTransferDispatcherTrait, PermitBatchTransferFrom, PermitTransferFrom,
@@ -402,9 +402,9 @@ fn test_permit_witness_transfer_from() {
         permitted: token_permission, nonce, deadline: (get_block_timestamp() + 100).into(),
     };
 
-    // Create a witness
-    let witness = ExampleWitness {
-        a: 1, b: Beta { bb: 2, bbb: array![].span() }, z: Zeta { zz: 3, zzz: array![].span() },
+    // Create a witness (struct hash)
+    let witness = MyWitness {
+        a: 1, b: Beta { b1: 2, b2: array![].span() }, z: Zeta { z1: 3, z2: array![].span() },
     }
         .hash_struct();
 
@@ -412,7 +412,7 @@ fn test_permit_witness_transfer_from() {
     start_cheat_caller_address_global(setup.bystander);
     let message_hash = permit
         .get_message_hash_with_witness(
-            setup.from.account.contract_address, witness, _EXAMPLE_WITNESS_TYPE_STRING(),
+            setup.from.account.contract_address, witness, _MY_WITNESS_TYPE_STRING(),
         );
     stop_cheat_caller_address_global();
     // Sign the message hash
@@ -431,7 +431,7 @@ fn test_permit_witness_transfer_from() {
             transfer_details,
             setup.from.account.contract_address,
             witness,
-            _EXAMPLE_WITNESS_TYPE_STRING(),
+            _MY_WITNESS_TYPE_STRING(),
             signature,
         );
     stop_cheat_caller_address(setup.permit2.contract_address);

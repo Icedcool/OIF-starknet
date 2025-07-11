@@ -1,0 +1,46 @@
+{
+  "domain": {
+    "name": "Permit2",
+    "version": "v1",
+    "chainId": "SN_SEPOLIA",
+    "revision": "1"
+  },
+  "primaryType": "Permit Batch",
+  "message": {
+    "Details": [
+      {
+        "Token": "0x1234",
+        "Amount": { "low": "0x1", "high": "0x0" },
+        "Expiration": "12345",
+        "Nonce": "1"
+      },
+      {
+        "Token": "0x1234",
+        "Amount": { "low": "0x1", "high": "0x0" },
+        "Expiration": "12345",
+        "Nonce": "1"
+      }
+    ],
+    "Spender": "0x5678",
+    "Sig Deadline": { "low": "0x1234567890", "high": "0x0" }
+  },
+  "types": {
+    "StarknetDomain": [
+      { "name": "name", "type": "shortstring" },
+      { "name": "version", "type": "shortstring" },
+      { "name": "chainId", "type": "shortstring" },
+      { "name": "revision", "type": "shortstring" }
+    ],
+    "Permit Details": [
+      { "name": "Token", "type": "ContractAddress" },
+      { "name": "Amount", "type": "u256" },
+      { "name": "Expiration", "type": "timestamp" },
+      { "name": "Nonce", "type": "timestamp" }
+    ],
+    "Permit Batch": [
+      { "name": "Details", "type": "Permit Details*" },
+      { "name": "Spender", "type": "ContractAddress" },
+      { "name": "Sig Deadline", "type": "u256" }
+    ]
+  }
+}

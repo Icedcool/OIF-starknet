@@ -1,0 +1,67 @@
+{
+  "domain": {
+    "name": "Permit2",
+    "version": "v1",
+    "chainId": "SN_SEPOLIA",
+    "revision": "1"
+  },
+  "primaryType": "Permit Witness Batch Transfer From",
+  "message": {
+    "Permitted": [
+      {
+        "Token": "0x1234",
+        "Amount": { "low": "0x1", "high": "0x0" }
+      },
+      {
+        "Token": "0x1234",
+        "Amount": { "low": "0x1", "high": "0x0" }
+      }
+    ],
+    "Spender": "0x5678",
+    "Nonce": "1",
+    "Deadline": { "low": "0x1234567890", "high": "0x0" },
+    "Witness": {
+      "A": "1",
+      "B": {
+        "B 1": "2",
+        "B 2": ["3", "4"]
+      },
+      "Z": {
+        "Z 1": "5",
+        "Z 2": ["6", "7"]
+      }
+    }
+  },
+  "types": {
+    "StarknetDomain": [
+      { "name": "name", "type": "shortstring" },
+      { "name": "version", "type": "shortstring" },
+      { "name": "chainId", "type": "shortstring" },
+      { "name": "revision", "type": "shortstring" }
+    ],
+    "Beta": [
+      { "name": "B 1", "type": "u128" },
+      { "name": "B 2", "type": "felt*" }
+    ],
+    "Token Permissions": [
+      { "name": "Token", "type": "ContractAddress" },
+      { "name": "Amount", "type": "u256" }
+    ],
+    "Mock Witness": [
+      { "name": "A", "type": "u128" },
+      { "name": "B", "type": "Beta" },
+      { "name": "Z", "type": "Zeta" }
+    ],
+    "Permit Witness Batch Transfer From": [
+      { "name": "Permitted", "type": "Token Permissions*" },
+      { "name": "Spender", "type": "ContractAddress" },
+      { "name": "Nonce", "type": "felt" },
+      { "name": "Deadline", "type": "u256" },
+      { "name": "Witness", "type": "Mock Witness" }
+    ],
+    "Zeta": [
+      { "name": "Z 1", "type": "felt" },
+      { "name": "Z 2", "type": "felt*" }
+    ]
+  }
+}

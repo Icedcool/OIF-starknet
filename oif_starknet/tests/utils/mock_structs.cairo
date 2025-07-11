@@ -4,6 +4,7 @@ use oif_starknet::libraries::permit_hash::{
     PermitTransferFromStructHash, PermitTransferFromStructHashWitness, TokenPermissionsStructHash,
     U256StructHash,
 };
+use oif_starknet::mocks::mock_witness::{Beta, MockWitness, MockWitnessStructHash, Zeta};
 use oif_starknet::permit2::allowance_transfer::interface::{
     PermitBatch, PermitDetails, PermitSingle,
 };
@@ -62,3 +63,11 @@ pub fn make_permit_batch_transfer_from() -> PermitBatchTransferFrom {
 
     PermitBatchTransferFrom { permitted: array![permitted, permitted].span(), nonce, deadline }
 }
+
+pub fn make_witness() -> MockWitness {
+    let b2: Span<felt252> = array![3, 4].span();
+    let z2: Span<felt252> = array![6, 7].span();
+
+    MockWitness { a: 1, b: Beta { b1: 2, b2 }, z: Zeta { z1: 5, z2 } }
+}
+

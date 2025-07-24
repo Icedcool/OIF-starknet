@@ -1,4 +1,5 @@
 use starknet::ContractAddress;
+use alexandria_bytes::{Bytes, BytesStore};
 
 /// Signals that an order has been opened
 /// @param order_id: A unique order identifier within this settlement system
@@ -25,7 +26,7 @@ pub trait IOriginSettler<TState> {
         ref self: TState,
         order: GaslessCrossChainOrder,
         signature: Array<felt252>,
-        origin_filler_data: ByteArray,
+        origin_filler_data: Bytes,
     );
 
     /// Opens a cross-chain order
@@ -47,7 +48,7 @@ pub trait IOriginSettler<TState> {
     /// Returns: ResolvedCrossChainOrder hydrated order data including the inputs and outputs of the
     /// order
     fn resolve_for(
-        self: @TState, order: GaslessCrossChainOrder, origin_filler_data: ByteArray,
+        self: @TState, order: GaslessCrossChainOrder, origin_filler_data: Bytes,
     ) -> ResolvedCrossChainOrder;
 
     /// Resolves a specific OnchainCrossChainOrder into a generic ResolvedCrossChainOrder
@@ -71,7 +72,7 @@ pub trait IDestinationSettler<TState> {
     /// - `order_id`: Unique order identifier for this order
     /// - `origin_data`: Data emitted on the origin to parameterize the fill
     /// - `filler_data`: Data provided by the filler to inform the fill or express their preferences
-    fn fill(ref self: TState, order_id: felt252, origin_data: ByteArray, filler_data: ByteArray);
+    fn fill(ref self: TState, order_id: felt252, origin_data: Bytes, filler_data: Bytes);
 }
 
 #[starknet::interface]
@@ -80,13 +81,18 @@ pub trait IERC7683Extra<TState> {
 
     fn witness_hash(self: @TState, resolved_order: ResolvedCrossChainOrder) -> felt252;
     fn used_nonces(self: @TState, user: ContractAddress, nonce: felt252) -> bool;
-    fn open_orders(self: @TState, order_id: felt252) -> ByteArray;
+    fn open_orders(self: @TState, order_id: felt252) -> Bytes;
     fn filled_orders(self: @TState, order_id: felt252) -> FilledOrder;
     fn order_status(self: @TState, order_id: felt252) -> felt252;
 
-    // { //
-    //
-    // call hash_struct on order
+    /// Checks whether a given nonce is valid.
+    ///
+    /// Parameters
+    /// - `from`: The address whose nonce validity is being checked.
+    /// - `nonce`: The nonce to check.
+    ///
+    /// Returns: `true` if the nonce is valid, `false` otherwise.
+    fn is_valid_nonce(self: @TState, from: ContractAddress, nonce: felt252) -> bool;
 
     /// WRITES ///
 
@@ -124,15 +130,6 @@ pub trait IERC7683Extra<TState> {
     /// Parameters:
     /// - `nonce`: The nonce to invalidate.
     fn invalidate_nonces(ref self: TState, nonce: felt252);
-
-    /// Checks whether a given nonce is valid.
-    ///
-    /// Parameters
-    /// - `from`: The address whose nonce validity is being checked.
-    /// - `nonce`: The nonce to check.
-    ///
-    /// Returns: `true` if the nonce is valid, `false` otherwise.
-    fn in_valid_nonce(self: @TState, from: ContractAddress, nonce: felt252) -> bool;
 }
 
 /// Standard order struct to be signed by users, disseminated to fillers, and submitted to origin
@@ -141,21 +138,21 @@ pub trait IERC7683Extra<TState> {
 pub struct GaslessCrossChainOrder {
     pub origin_settler: ContractAddress,
     pub user: ContractAddress,
-    pub nonce: felt252, //u256,
-    pub origin_chain_id: u256,
-    pub open_deadline: u64, //u32,
-    pub fill_deadline: u64, //u32,
+    pub nonce: felt252,
+    pub origin_chain_id: u64,
+    pub open_deadline: u64,
+    pub fill_deadline: u64,
     pub order_data_type: felt252,
-    pub order_data: ByteArray,
+    pub order_data: Bytes,
 }
 
 /// Standard order struct for user-opened orders, where the user is the one submitting the order
 /// creation transaction
 #[derive(Serde, Drop, Clone)]
 pub struct OnchainCrossChainOrder {
-    pub fill_deadline: u64, //u32,
+    pub fill_deadline: u64,
     pub order_data_type: felt252,
-    pub order_data: ByteArray,
+    pub order_data: Bytes,
 }
 
 /// An implementation-generic representation of an order intended for filler consumption
@@ -166,7 +163,7 @@ pub struct OnchainCrossChainOrder {
 #[derive(Serde, Drop)]
 pub struct ResolvedCrossChainOrder {
     pub user: ContractAddress,
-    pub origin_chain_id: u256,
+    pub origin_chain_id: u64,
     pub open_deadline: u64,
     pub fill_deadline: u64,
     pub order_id: felt252,
@@ -181,21 +178,21 @@ pub struct Output {
     pub token: ContractAddress,
     pub amount: u256,
     pub recipient: ContractAddress,
-    pub chain_id: u256,
+    pub chain_id: u64,
 }
 
 /// Instructions to parameterize each leg of the fill
 #[derive(Serde, Drop)]
 pub struct FillInstruction {
-    pub destination_chain_id: u256,
+    pub destination_chain_id: u64,
     pub destination_settler: ContractAddress,
-    pub origin_data: ByteArray,
+    pub origin_data: Bytes,
 }
 
 /// Represents data for an order that has been filled.
 #[derive(starknet::Store, Drop, Serde)]
 pub struct FilledOrder {
-    pub origin_data: ByteArray,
-    pub filler_data: ByteArray,
+    pub origin_data: Bytes,
+    pub filler_data: Bytes,
 }
 

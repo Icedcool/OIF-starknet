@@ -3,6 +3,7 @@ use core::poseidon::PoseidonTrait;
 use oif_starknet::erc7683::interface::{FillInstruction, Output, ResolvedCrossChainOrder};
 use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
 use permit2::snip12_utils::permits::_U256_TYPE_HASH;
+use alexandria_bytes::{Bytes, BytesTrait};
 
 
 /// @title Base7683 (Cairo)
@@ -14,6 +15,7 @@ use permit2::snip12_utils::permits::_U256_TYPE_HASH;
 /// provide a common interface for solvers to use.
 #[starknet::component]
 pub mod Base7683Component {
+    use alexandria_bytes::{Bytes, BytesStore};
     use oif_starknet::erc7683::interface::{
         FilledOrder, GaslessCrossChainOrder, IDestinationSettler, IERC7683Extra, IOriginSettler,
         OnchainCrossChainOrder, Open, ResolvedCrossChainOrder,
@@ -51,7 +53,7 @@ pub mod Base7683Component {
     pub struct Storage {
         pub permit2_address: ContractAddress,
         pub used_nonces: Map<(ContractAddress, felt252), bool>,
-        pub open_orders: Map<felt252, ByteArray>,
+        pub open_orders: Map<felt252, Bytes>,
         pub filled_orders: Map<felt252, FilledOrder>,
         pub order_status: Map<felt252, felt252>,
     }
@@ -59,7 +61,7 @@ pub mod Base7683Component {
     /// EVENTS ///
     #[event]
     #[derive(Drop, starknet::Event)]
-    enum Event {
+    pub enum Event {
         Filled: Filled,
         Settle: Settle,
         Refund: Refund,
@@ -75,8 +77,8 @@ pub mod Base7683Component {
     #[derive(Drop, starknet::Event)]
     struct Filled {
         order_id: felt252,
-        origin_data: ByteArray,
-        filler_data: ByteArray,
+        origin_data: Bytes,
+        filler_data: Bytes,
     }
 
     /// Emitted when a batch of orders is settled.
@@ -85,7 +87,7 @@ pub mod Base7683Component {
     #[derive(Drop, starknet::Event)]
     struct Settle {
         order_ids: Array<felt252>,
-        orders_filler_data: Array<ByteArray>,
+        orders_filler_data: Array<Bytes>,
     }
 
     /// Emitted when a batch of orders is refunded.
@@ -109,14 +111,14 @@ pub mod Base7683Component {
     /// PUBLIC ///
 
     #[embeddable_as(OriginSettlerImpl)]
-    impl OriginSettler<
-        TContractState, +HasComponent<TContractState>, +Base7683Virtual<TContractState>,
+    pub impl OriginSettler<
+        TContractState, +HasComponent<TContractState>, +Virtual<TContractState>,
     > of IOriginSettler<ComponentState<TContractState>> {
         fn open_for(
             ref self: ComponentState<TContractState>,
             order: GaslessCrossChainOrder,
             signature: Array<felt252>,
-            origin_filler_data: ByteArray,
+            origin_filler_data: Bytes,
         ) {
             assert(get_block_timestamp().into() < order.open_deadline, Errors::ORDER_OPEN_EXPIRED);
             assert(
@@ -153,20 +155,12 @@ pub mod Base7683Component {
             self.order_status.entry(order_id).write(OPENED);
             self._use_nonce(get_caller_address(), nonce);
 
-            //let mut total_value = 0_u256;
-            for min_received in @resolved_order.min_received {
-                //let token = *min_received.token;
-                //if token == Zero::<ContractAddress>::zero() {
-                //    total_value += *min_received.amount;
-                //} else {
+            for min_received in resolved_order.min_received.span() {
                 IERC20Dispatcher { contract_address: *min_received.token }
                     .transfer_from(
                         get_caller_address(), get_contract_address(), *min_received.amount,
                     );
-                //}
-            }
-
-            /// If msg.value != total_value, revert with INVALID_NATIVE_AMOUNT
+            };
 
             self.emit(Open { order_id, resolved_order });
         }
@@ -175,7 +169,7 @@ pub mod Base7683Component {
         fn resolve_for(
             self: @ComponentState<TContractState>,
             order: GaslessCrossChainOrder,
-            origin_filler_data: ByteArray,
+            origin_filler_data: Bytes,
         ) -> ResolvedCrossChainOrder {
             let (resolved_order, _, _) = self._resolve_gasless_order(@order, @origin_filler_data);
 
@@ -193,14 +187,14 @@ pub mod Base7683Component {
 
 
     #[embeddable_as(DestinationSettlerImpl)]
-    impl DestinationSettler<
-        TContractState, +HasComponent<TContractState>, +Base7683Virtual<TContractState>,
+    pub impl DestinationSettler<
+        TContractState, +HasComponent<TContractState>, +Virtual<TContractState>,
     > of IDestinationSettler<ComponentState<TContractState>> {
         fn fill(
             ref self: ComponentState<TContractState>,
             order_id: felt252,
-            origin_data: ByteArray,
-            filler_data: ByteArray,
+            origin_data: Bytes,
+            filler_data: Bytes,
         ) {
             assert(
                 self.order_status.entry(order_id).read() == UNKNOWN, Errors::INVALID_ORDER_STATUS,
@@ -223,10 +217,9 @@ pub mod Base7683Component {
     }
 
 
-    /// Extra public functions for the Base7683 component.
     #[embeddable_as(ERC7683ExtraImpl)]
     impl ERC7683Extra<
-        TContractState, +HasComponent<TContractState>, +Base7683Virtual<TContractState>,
+        TContractState, +HasComponent<TContractState>, +Virtual<TContractState>,
     > of IERC7683Extra<ComponentState<TContractState>> {
         /// READS ///
 
@@ -242,7 +235,7 @@ pub mod Base7683Component {
             self.used_nonces.entry((user, nonce)).read()
         }
 
-        fn open_orders(self: @ComponentState<TContractState>, order_id: felt252) -> ByteArray {
+        fn open_orders(self: @ComponentState<TContractState>, order_id: felt252) -> Bytes {
             self.open_orders.entry(order_id).read()
         }
 
@@ -257,8 +250,8 @@ pub mod Base7683Component {
         /// WRITES ///
 
         fn settle(ref self: ComponentState<TContractState>, mut order_ids: Array<felt252>) {
-            let mut orders_origin_data: Array<ByteArray> = array![];
-            let mut orders_filler_data: Array<ByteArray> = array![];
+            let mut orders_origin_data: Array<Bytes> = array![];
+            let mut orders_filler_data: Array<Bytes> = array![];
 
             for order_id in order_ids.span() {
                 assert(
@@ -268,7 +261,7 @@ pub mod Base7683Component {
 
                 orders_origin_data.append(self.filled_orders.entry(*order_id).read().origin_data);
                 orders_filler_data.append(self.filled_orders.entry(*order_id).read().filler_data);
-            }
+            };
 
             self._settle_orders(@order_ids, @orders_origin_data, @orders_filler_data);
 
@@ -291,7 +284,7 @@ pub mod Base7683Component {
                     get_block_timestamp().into() >= *order.fill_deadline,
                     Errors::ORDER_FILL_NOT_EXPIRED,
                 );
-            }
+            };
 
             self._refund_gasless_orders(@orders, @order_ids);
 
@@ -315,7 +308,7 @@ pub mod Base7683Component {
                     get_block_timestamp().into() >= *order.fill_deadline,
                     Errors::ORDER_FILL_NOT_EXPIRED,
                 );
-            }
+            };
 
             self._refund_onchain_orders(@orders, @order_ids);
 
@@ -329,7 +322,7 @@ pub mod Base7683Component {
             self.emit(NonceInvalidation { owner, nonce });
         }
 
-        fn in_valid_nonce(
+        fn is_valid_nonce(
             self: @ComponentState<TContractState>, from: ContractAddress, nonce: felt252,
         ) -> bool {
             !self.used_nonces.entry((from, nonce)).read()
@@ -337,7 +330,7 @@ pub mod Base7683Component {
     }
 
     /// VIRTUAL ///
-    pub trait Base7683Virtual<TContractState, +HasComponent<TContractState>> {
+    pub trait Virtual<TContractState> {
         /// Resolves a GaslessCrossChainOrder into a ResolvedCrossChainOrder.
         /// @dev To be implemented by the inheriting contract. Contains logic specific to the order
         /// type and data.
@@ -353,7 +346,7 @@ pub mod Base7683Component {
         fn _resolve_gasless_order(
             self: @ComponentState<TContractState>,
             order: @GaslessCrossChainOrder,
-            origin_filler_data: @ByteArray,
+            origin_filler_data: @Bytes,
         ) -> (ResolvedCrossChainOrder, felt252, felt252);
 
         /// Resolves an OnchainCrossChainOrder into a ResolvedCrossChainOrder.
@@ -383,8 +376,8 @@ pub mod Base7683Component {
         fn _fill_order(
             ref self: ComponentState<TContractState>,
             order_id: felt252,
-            origin_data: @ByteArray,
-            filler_data: @ByteArray,
+            origin_data: @Bytes,
+            filler_data: @Bytes,
         );
 
         /// Settles a batch of orders using their origin and filler data.
@@ -398,8 +391,8 @@ pub mod Base7683Component {
         fn _settle_orders(
             ref self: ComponentState<TContractState>,
             order_ids: @Array<felt252>,
-            orders_origin_data: @Array<ByteArray>,
-            orders_filler_data: @Array<ByteArray>,
+            orders_origin_data: @Array<Bytes>,
+            orders_filler_data: @Array<Bytes>,
         );
 
         /// Refunds a batch of GaslessCrossChainOrders.
@@ -432,7 +425,7 @@ pub mod Base7683Component {
         /// local domain.
         ///
         /// Returns:  The local domain ID.
-        fn _local_domain(self: @ComponentState<TContractState>) -> u256;
+        fn _local_domain(self: @ComponentState<TContractState>) -> u64;
 
         /// Computes the unique identifier for a GaslessCrossChainOrder.
         /// @dev To be implemented by the inheriting contract. Specifies the logic to compute the
@@ -443,7 +436,7 @@ pub mod Base7683Component {
         ///
         /// Returns: The unique identifier for the order.
         fn _get_gasless_order_id(
-            ref self: ComponentState<TContractState>, order: @GaslessCrossChainOrder,
+            self: @ComponentState<TContractState>, order: @GaslessCrossChainOrder,
         ) -> felt252;
 
         /// Computes the unique identifier for a OnchainCrossChainOrder.
@@ -462,7 +455,9 @@ pub mod Base7683Component {
 
     /// INTERNAL ///
     #[generate_trait]
-    pub impl InternalImpl<TContractState> of InternalTrait<TContractState> {
+    pub impl InternalImpl<
+        TContractState, impl Virtual: Virtual<TContractState>,
+    > of InternalTrait<TContractState> {
         fn _initialize(ref self: ComponentState<TContractState>, permit2_address: ContractAddress) {
             self.permit2_address.write(permit2_address);
         }
@@ -499,7 +494,7 @@ pub mod Base7683Component {
             let mut permitted: Array<TokenPermissions> = array![];
             let mut transfer_details: Array<SignatureTransferDetails> = array![];
 
-            for min_received in resolved_order.min_received {
+            for min_received in resolved_order.min_received.span() {
                 permitted
                     .append(
                         TokenPermissions {
@@ -512,7 +507,7 @@ pub mod Base7683Component {
                             to: receiver, requested_amount: *min_received.amount,
                         },
                     );
-            }
+            };
 
             let permit = PermitBatchTransferFrom {
                 permitted: permitted.span(),
@@ -533,8 +528,9 @@ pub mod Base7683Component {
     }
 }
 
+// @dev, fix bytes/strings/byte array updates
 pub const RESOLVED_CROSS_CHAIN_ORDER_TYPE_HASH: felt252 = selector!(
-    "\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u256\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"felt\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instruction\":\"Fill Instruction*\")\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"string\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
+    "\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u128\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"felt\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instruction\":\"Fill Instruction*\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
 );
 
 pub const OUTPUT_TYPE_HASH: felt252 = selector!(
@@ -542,11 +538,11 @@ pub const OUTPUT_TYPE_HASH: felt252 = selector!(
 );
 
 pub const FILL_INSTRUCTION_TYPE_HASH: felt252 = selector!(
-    "\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"string\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
+    "\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
 );
 
 pub fn WITNESS_TYPE_STRING() -> ByteArray {
-    "\"Witness\":\"Resolved Cross Chain Order\")\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"string\")\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u256\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"felt\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instructions\":\"Fill Instruction*\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u256\")\"Token Permissions\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")"
+    "\"Witness\":\"Resolved Cross Chain Order\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u256\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"felt\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instructions\":\"Fill Instruction*\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u256\")\"Token Permissions\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")"
 }
 
 pub impl U256StructHash of StructHash<u256> {
@@ -557,35 +553,31 @@ pub impl U256StructHash of StructHash<u256> {
 
 pub impl ResolvedCrossChainOrderStructHash of StructHash<ResolvedCrossChainOrder> {
     fn hash_struct(self: @ResolvedCrossChainOrder) -> felt252 {
-        let hashed_max_spents = self
-            .max_spent
-            .into_iter()
-            .map(|output| output.hash_struct())
-            .collect::<Array<felt252>>()
-            .span();
-        let hashed_min_receiveds = self
-            .min_received
-            .into_iter()
-            .map(|output| output.hash_struct())
-            .collect::<Array<felt252>>()
-            .span();
-        let hashed_fill_instructions = self
-            .fill_instructions
-            .into_iter()
-            .map(|output| output.hash_struct())
-            .collect::<Array<felt252>>()
-            .span();
+        let mut hashed_max_spents: Array<felt252> = array![];
+        for max_spent in self.max_spent.span() {
+            hashed_max_spents.append(max_spent.hash_struct());
+        };
+
+        let mut hashed_min_receiveds: Array<felt252> = array![];
+        for min_received in self.min_received.span() {
+            hashed_max_spents.append(min_received.hash_struct());
+        };
+
+        let mut hashed_fill_instructions: Array<felt252> = array![];
+        for fill_instruction in self.fill_instructions.span() {
+            hashed_fill_instructions.append(fill_instruction.hash_struct());
+        };
 
         PoseidonTrait::new()
             .update_with(RESOLVED_CROSS_CHAIN_ORDER_TYPE_HASH)
             .update_with(*self.user)
-            .update_with(self.origin_chain_id.hash_struct())
+            .update_with(*self.origin_chain_id)
             .update_with(*self.open_deadline)
             .update_with(*self.fill_deadline)
             .update_with(*self.order_id)
-            .update_with(hashed_max_spents)
-            .update_with(hashed_min_receiveds)
-            .update_with(hashed_fill_instructions)
+            .update_with(hashed_max_spents.span())
+            .update_with(hashed_min_receiveds.span())
+            .update_with(hashed_fill_instructions.span())
             .finalize()
     }
 }
@@ -594,7 +586,7 @@ pub impl FillInstructionStructHash of StructHash<FillInstruction> {
     fn hash_struct(self: @FillInstruction) -> felt252 {
         PoseidonTrait::new()
             .update_with(FILL_INSTRUCTION_TYPE_HASH)
-            .update_with(self.destination_chain_id.hash_struct())
+            .update_with(*self.destination_chain_id)
             .update_with(*self.destination_settler)
             .update_with(self.origin_data.hash_struct())
             .finalize()
@@ -608,7 +600,7 @@ pub impl OutputStructHash of StructHash<Output> {
             .update_with(*self.token)
             .update_with(self.amount.hash_struct())
             .update_with(*self.recipient)
-            .update_with(self.chain_id.hash_struct())
+            .update_with(*self.chain_id)
             .finalize()
     }
 }
@@ -618,7 +610,7 @@ pub impl SpanFelt252StructHash of StructHash<Span<felt252>> {
         let mut state = PoseidonTrait::new();
         for el in (*self) {
             state = state.update_with(*el);
-        }
+        };
         state.finalize()
     }
 }
@@ -626,21 +618,38 @@ pub impl SpanFelt252StructHash of StructHash<Span<felt252>> {
 pub impl ArrayFelt252StructHash of StructHash<Array<felt252>> {
     fn hash_struct(self: @Array<felt252>) -> felt252 {
         let mut state = PoseidonTrait::new();
-        for el in (self) {
+        for el in self.span() {
             state = state.update_with(*el);
-        }
+        };
         state.finalize()
     }
 }
 
-pub impl ByteArrayStructHash of StructHash<ByteArray> {
-    fn hash_struct(self: @ByteArray) -> felt252 {
+// pub impl ByteArrayStructHash of StructHash<ByteArray> {
+//     fn hash_struct(self: @ByteArray) -> felt252 {
+//         let mut state = PoseidonTrait::new();
+//         let mut output = array![];
+//         Serde::serialize(self, ref output);
+//         for e in output.span() {
+//             state = state.update_with(*e);
+//         };
+//         state.finalize()
+//     }
+// }
+
+pub impl BytesStructHash of StructHash<Bytes> {
+    fn hash_struct(self: @Bytes) -> felt252 {
         let mut state = PoseidonTrait::new();
-        let mut output = array![];
-        Serde::serialize(self, ref output);
-        for e in output.span() {
-            state = state.update_with(*e);
-        }
+        let clone: Bytes = Clone::<Bytes>::clone(self);
+
+        let data = clone.data();
+
+        state = state.update_with(self.size());
+        for u128 in data.span() {
+            state = state.update_with(*u128);
+            u128;
+        };
+
         state.finalize()
     }
 }

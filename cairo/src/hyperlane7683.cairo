@@ -2,7 +2,9 @@
 pub mod Hyperlane7683 {
     use oif_starknet::libraries::hyperlane7683_message::Hyperlane7683Message;
     use contracts::client::gas_router_component::GasRouterComponent;
-    use contracts::client::mailboxclient_component::MailboxclientComponent;
+    use contracts::client::mailboxclient_component::{
+        MailboxclientComponent, MailboxclientComponent::MailboxClientInternalImpl,
+    };
     use contracts::client::router_component::RouterComponent;
     use contracts::client::router_component::RouterComponent::{IMessageRecipientInternalHookTrait};
     use openzeppelin_access::ownable::OwnableComponent;
@@ -47,7 +49,7 @@ pub mod Hyperlane7683 {
     #[abi(embed_v0)]
     impl MailboxClientImpl =
         MailboxclientComponent::MailboxClientImpl<ContractState>;
-    impl MailboxClientInternalImpl =
+    impl MailboxClientInternalImpll =
         MailboxclientComponent::MailboxClientInternalImpl<ContractState>;
 
     /// Router
@@ -81,18 +83,19 @@ pub mod Hyperlane7683 {
     /// CONSTRUCTOR ///
     #[constructor]
     fn constructor(
-        ref self: ContractState, mailbox: ContractAddress, permit2: ContractAddress,
-    ) { //self.base7683._initialize(permit2);
-    //self.gas_router._initialize(mailbox);
+        ref self: ContractState,
+        permit2: ContractAddress,
+        mailbox: ContractAddress,
+        owner: ContractAddress,
+        hook: ContractAddress,
+        interchain_security_module: ContractAddress,
+    ) {
+        self.ownable.initializer(owner);
+        self.base7683._initialize(permit2);
+        self
+            .mailbox_client
+            .initialize(mailbox, Option::Some(hook), Option::Some(interchain_security_module));
     }
-
-    //    /// INITIALIZER ///
-    //    #[constructor]
-    //    fn initialize(ref self: ContractState, mailbox: ContractAddress, permit2: ContractAddress)
-    //    {
-    //        self.base7683._initialize(permit2);
-    //        // self.gas_router._initialize(mailbox);
-    //    }
 
     /// EVENTS ///
     #[event]

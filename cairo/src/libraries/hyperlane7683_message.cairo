@@ -11,9 +11,7 @@ pub mod Hyperlane7683Message {
     /// settlement receiver.
     ///
     /// Returns: Formatted message body
-    pub fn encode(
-        settle: bool, order_ids: Span<felt252>, orders_filler_data: Span<Bytes>,
-    ) -> Bytes {
+    pub fn encode(settle: bool, order_ids: Span<u256>, orders_filler_data: Span<Bytes>) -> Bytes {
         let mut encoded: Bytes = BytesTrait::new_empty();
 
         match settle {
@@ -23,7 +21,7 @@ pub mod Hyperlane7683Message {
 
         encoded.append_usize(order_ids.len());
         for order_id in order_ids {
-            encoded.append_felt252(*order_id);
+            encoded.append_u256(*order_id);
         };
 
         encoded.append_usize(orders_filler_data.len());
@@ -41,7 +39,7 @@ pub mod Hyperlane7683Message {
     /// - `message`: The interchain message
     ///
     /// Returns The array of calls
-    pub fn decode(message: Bytes) -> (bool, Span<felt252>, Span<Bytes>) {
+    pub fn decode(message: Bytes) -> (bool, Span<u256>, Span<Bytes>) {
         let mut order_ids = array![];
         let mut orders_filler_data = array![];
 
@@ -51,7 +49,7 @@ pub mod Hyperlane7683Message {
         // Order IDs
         let (mut offset, order_ids_size) = message.read_usize(offset);
         for _ in 0..order_ids_size {
-            let (_offset, order_id) = message.read_felt252(offset);
+            let (_offset, order_id) = message.read_u256(offset);
             order_ids.append(order_id);
 
             offset = _offset;
@@ -72,11 +70,11 @@ pub mod Hyperlane7683Message {
         (settle == 1, order_ids.span(), orders_filler_data.span())
     }
 
-    pub fn encode_settle(order_ids: Span<felt252>, orders_filler_data: Span<Bytes>) -> Bytes {
+    pub fn encode_settle(order_ids: Span<u256>, orders_filler_data: Span<Bytes>) -> Bytes {
         encode(true, order_ids, orders_filler_data)
     }
 
-    pub fn encode_refund(order_ids: Span<felt252>) -> Bytes {
+    pub fn encode_refund(order_ids: Span<u256>) -> Bytes {
         encode(false, order_ids, array![BytesTrait::new_empty()].span())
     }
 }

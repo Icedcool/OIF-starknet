@@ -53,9 +53,9 @@ pub mod Base7683Component {
     pub struct Storage {
         pub permit2_address: ContractAddress,
         pub used_nonces: Map<(ContractAddress, felt252), bool>,
-        pub open_orders: Map<felt252, Bytes>,
-        pub filled_orders: Map<felt252, FilledOrder>,
-        pub order_status: Map<felt252, felt252>,
+        pub open_orders: Map<u256, Bytes>,
+        pub filled_orders: Map<u256, FilledOrder>,
+        pub order_status: Map<u256, felt252>,
     }
 
     /// EVENTS ///
@@ -76,7 +76,7 @@ pub mod Base7683Component {
     /// param filler_data: The filler-specific data for the order.
     #[derive(Drop, starknet::Event)]
     struct Filled {
-        order_id: felt252,
+        order_id: u256,
         origin_data: Bytes,
         filler_data: Bytes,
     }
@@ -86,7 +86,7 @@ pub mod Base7683Component {
     /// @param orders_filler_data The filler data for the settled orders.
     #[derive(Drop, starknet::Event)]
     struct Settle {
-        order_ids: Array<felt252>,
+        order_ids: Array<u256>,
         orders_filler_data: Array<Bytes>,
     }
 
@@ -94,7 +94,7 @@ pub mod Base7683Component {
     /// @param order_ids: The IDs of the refunded orders.
     #[derive(Drop, starknet::Event)]
     struct Refund {
-        order_ids: Array<felt252>,
+        order_ids: Array<u256>,
     }
 
     /// Emitted when a nonce is invalidated for an address.
@@ -192,7 +192,7 @@ pub mod Base7683Component {
     > of IDestinationSettler<ComponentState<TContractState>> {
         fn fill(
             ref self: ComponentState<TContractState>,
-            order_id: felt252,
+            order_id: u256,
             origin_data: Bytes,
             filler_data: Bytes,
         ) {
@@ -235,21 +235,21 @@ pub mod Base7683Component {
             self.used_nonces.entry((user, nonce)).read()
         }
 
-        fn open_orders(self: @ComponentState<TContractState>, order_id: felt252) -> Bytes {
+        fn open_orders(self: @ComponentState<TContractState>, order_id: u256) -> Bytes {
             self.open_orders.entry(order_id).read()
         }
 
-        fn filled_orders(self: @ComponentState<TContractState>, order_id: felt252) -> FilledOrder {
+        fn filled_orders(self: @ComponentState<TContractState>, order_id: u256) -> FilledOrder {
             self.filled_orders.entry(order_id).read()
         }
 
-        fn order_status(self: @ComponentState<TContractState>, order_id: felt252) -> felt252 {
+        fn order_status(self: @ComponentState<TContractState>, order_id: u256) -> felt252 {
             self.order_status.entry(order_id).read()
         }
 
         /// WRITES ///
 
-        fn settle(ref self: ComponentState<TContractState>, mut order_ids: Array<felt252>) {
+        fn settle(ref self: ComponentState<TContractState>, mut order_ids: Array<u256>) {
             let mut orders_origin_data: Array<Bytes> = array![];
             let mut orders_filler_data: Array<Bytes> = array![];
 
@@ -271,7 +271,7 @@ pub mod Base7683Component {
         fn refund_gasless_cross_chain_order(
             ref self: ComponentState<TContractState>, orders: Array<GaslessCrossChainOrder>,
         ) {
-            let mut order_ids: Array<felt252> = array![];
+            let mut order_ids: Array<u256> = array![];
             for order in orders.span() {
                 let order_id = self._get_gasless_order_id(order);
                 order_ids.append(order_id);
@@ -294,7 +294,7 @@ pub mod Base7683Component {
         fn refund_onchain_cross_chain_order(
             ref self: ComponentState<TContractState>, orders: Array<OnchainCrossChainOrder>,
         ) {
-            let mut order_ids: Array<felt252> = array![];
+            let mut order_ids: Array<u256> = array![];
 
             for order in orders.span() {
                 let order_id = self._get_onchain_order_id(order);
@@ -347,7 +347,7 @@ pub mod Base7683Component {
             self: @ComponentState<TContractState>,
             order: @GaslessCrossChainOrder,
             origin_filler_data: @Bytes,
-        ) -> (ResolvedCrossChainOrder, felt252, felt252);
+        ) -> (ResolvedCrossChainOrder, u256, felt252);
 
         /// Resolves an OnchainCrossChainOrder into a ResolvedCrossChainOrder.
         /// @dev To be implemented by the inheriting contract. Contains logic specific to the order
@@ -362,7 +362,7 @@ pub mod Base7683Component {
         /// - The nonce associated with the order.
         fn _resolve_onchain_order(
             self: @ComponentState<TContractState>, order: @OnchainCrossChainOrder,
-        ) -> (ResolvedCrossChainOrder, felt252, felt252);
+        ) -> (ResolvedCrossChainOrder, u256, felt252);
 
         /// Fills an order with specific origin and filler data.
         /// @dev To be implemented by the inheriting contract. Defines how to process the origin and
@@ -375,7 +375,7 @@ pub mod Base7683Component {
         /// information.
         fn _fill_order(
             ref self: ComponentState<TContractState>,
-            order_id: felt252,
+            order_id: u256,
             origin_data: @Bytes,
             filler_data: @Bytes,
         );
@@ -390,7 +390,7 @@ pub mod Base7683Component {
         /// - `orders_filler_data`: The filler data for the orders being settled.
         fn _settle_orders(
             ref self: ComponentState<TContractState>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
             orders_origin_data: @Array<Bytes>,
             orders_filler_data: @Array<Bytes>,
         );
@@ -404,7 +404,7 @@ pub mod Base7683Component {
         fn _refund_gasless_orders(
             ref self: ComponentState<TContractState>,
             orders: @Array<GaslessCrossChainOrder>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
         );
 
         /// Refunds a batch of OnchainCrossChainOrders.
@@ -416,7 +416,7 @@ pub mod Base7683Component {
         fn _refund_onchain_orders(
             ref self: ComponentState<TContractState>,
             orders: @Array<OnchainCrossChainOrder>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
         );
 
 
@@ -425,7 +425,7 @@ pub mod Base7683Component {
         /// local domain.
         ///
         /// Returns:  The local domain ID.
-        fn _local_domain(self: @ComponentState<TContractState>) -> u64;
+        fn _local_domain(self: @ComponentState<TContractState>) -> u32;
 
         /// Computes the unique identifier for a GaslessCrossChainOrder.
         /// @dev To be implemented by the inheriting contract. Specifies the logic to compute the
@@ -437,7 +437,7 @@ pub mod Base7683Component {
         /// Returns: The unique identifier for the order.
         fn _get_gasless_order_id(
             self: @ComponentState<TContractState>, order: @GaslessCrossChainOrder,
-        ) -> felt252;
+        ) -> u256;
 
         /// Computes the unique identifier for a OnchainCrossChainOrder.
         /// @dev To be implemented by the inheriting contract. Specifies the logic to compute the
@@ -449,7 +449,7 @@ pub mod Base7683Component {
         /// Returns: The unique identifier for the order.
         fn _get_onchain_order_id(
             self: @ComponentState<TContractState>, order: @OnchainCrossChainOrder,
-        ) -> felt252;
+        ) -> u256;
     }
 
 
@@ -530,19 +530,19 @@ pub mod Base7683Component {
 
 // @dev, fix bytes/strings/byte array updates
 pub const RESOLVED_CROSS_CHAIN_ORDER_TYPE_HASH: felt252 = selector!(
-    "\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u128\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"felt\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instruction\":\"Fill Instruction*\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
+    "\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u128\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"u256\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instruction\":\"Fill Instruction*\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"Fill Instruction\"(\"Destination Chain ID\":\"u128\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u128\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
 );
 
 pub const OUTPUT_TYPE_HASH: felt252 = selector!(
-    "\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
+    "\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u128\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
 );
 
 pub const FILL_INSTRUCTION_TYPE_HASH: felt252 = selector!(
-    "\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")",
+    "\"Fill Instruction\"(\"Destination Chain ID\":\"u128\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")",
 );
 
 pub fn WITNESS_TYPE_STRING() -> ByteArray {
-    "\"Witness\":\"Resolved Cross Chain Order\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"Fill Instruction\"(\"Destination Chain ID\":\"u256\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u256\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"felt\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instructions\":\"Fill Instruction*\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u256\")\"Token Permissions\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")"
+    "\"Witness\":\"Resolved Cross Chain Order\")\"Bytes\"(\"Size\":\"u128\",\"Data\":\"u128*\")\"Fill Instruction\"(\"Destination Chain ID\":\"u128\",\"Destination Settler\":\"ContractAddress\",\"Origin Data\":\"Bytes\")\"Resolved Cross Chain Order\"(\"User\":\"ContractAddress\",\"Origin Chain ID\":\"u128\",\"Open Deadline\":\"timestamp\",\"Fill Deadline\":\"timestamp\",\"Order ID\":\"u256\",\"Max Spent\":\"Output*\",\"Min Received\":\"Output*\",\"Fill Instructions\":\"Fill Instruction*\")\"Output\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\",\"Recipient\":\"ContractAddress\",\"Chain ID\":\"u128\")\"Token Permissions\"(\"Token\":\"ContractAddress\",\"Amount\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")"
 }
 
 pub impl U256StructHash of StructHash<u256> {
@@ -574,7 +574,7 @@ pub impl ResolvedCrossChainOrderStructHash of StructHash<ResolvedCrossChainOrder
             .update_with(*self.origin_chain_id)
             .update_with(*self.open_deadline)
             .update_with(*self.fill_deadline)
-            .update_with(*self.order_id)
+            .update_with(self.order_id.hash_struct())
             .update_with(hashed_max_spents.span())
             .update_with(hashed_min_receiveds.span())
             .update_with(hashed_fill_instructions.span())

@@ -7,7 +7,7 @@ use alexandria_bytes::{Bytes, BytesStore};
 /// Open
 #[derive(Drop, starknet::Event)]
 pub struct Open {
-    pub order_id: felt252,
+    pub order_id: u256,
     pub resolved_order: ResolvedCrossChainOrder,
 }
 
@@ -72,7 +72,7 @@ pub trait IDestinationSettler<TState> {
     /// - `order_id`: Unique order identifier for this order
     /// - `origin_data`: Data emitted on the origin to parameterize the fill
     /// - `filler_data`: Data provided by the filler to inform the fill or express their preferences
-    fn fill(ref self: TState, order_id: felt252, origin_data: Bytes, filler_data: Bytes);
+    fn fill(ref self: TState, order_id: u256, origin_data: Bytes, filler_data: Bytes);
 }
 
 #[starknet::interface]
@@ -81,9 +81,9 @@ pub trait IERC7683Extra<TState> {
 
     fn witness_hash(self: @TState, resolved_order: ResolvedCrossChainOrder) -> felt252;
     fn used_nonces(self: @TState, user: ContractAddress, nonce: felt252) -> bool;
-    fn open_orders(self: @TState, order_id: felt252) -> Bytes;
-    fn filled_orders(self: @TState, order_id: felt252) -> FilledOrder;
-    fn order_status(self: @TState, order_id: felt252) -> felt252;
+    fn open_orders(self: @TState, order_id: u256) -> Bytes;
+    fn filled_orders(self: @TState, order_id: u256) -> FilledOrder;
+    fn order_status(self: @TState, order_id: u256) -> felt252;
 
     /// Checks whether a given nonce is valid.
     ///
@@ -104,7 +104,7 @@ pub trait IERC7683Extra<TState> {
     ///
     /// Parameters:
     /// - `order_ids`: An array of IDs for the orders to settle.
-    fn settle(ref self: TState, order_ids: Array<felt252>);
+    fn settle(ref self: TState, order_ids: Array<u256>);
 
     /// Refunds a batch of expired GaslessCrossChainOrders on the chain where the orders were
     /// opened. The refunded status should not be changed here but rather on the origin chain. To
@@ -139,7 +139,7 @@ pub struct GaslessCrossChainOrder {
     pub origin_settler: ContractAddress,
     pub user: ContractAddress,
     pub nonce: felt252,
-    pub origin_chain_id: u64,
+    pub origin_chain_id: u32,
     pub open_deadline: u64,
     pub fill_deadline: u64,
     pub order_data_type: felt252,
@@ -163,10 +163,10 @@ pub struct OnchainCrossChainOrder {
 #[derive(Serde, Drop)]
 pub struct ResolvedCrossChainOrder {
     pub user: ContractAddress,
-    pub origin_chain_id: u64,
+    pub origin_chain_id: u32,
     pub open_deadline: u64,
     pub fill_deadline: u64,
-    pub order_id: felt252,
+    pub order_id: u256,
     pub max_spent: Array<Output>,
     pub min_received: Array<Output>,
     pub fill_instructions: Array<FillInstruction>,
@@ -178,13 +178,13 @@ pub struct Output {
     pub token: ContractAddress,
     pub amount: u256,
     pub recipient: ContractAddress,
-    pub chain_id: u64,
+    pub chain_id: u32,
 }
 
 /// Instructions to parameterize each leg of the fill
 #[derive(Serde, Drop)]
 pub struct FillInstruction {
-    pub destination_chain_id: u64,
+    pub destination_chain_id: u32,
     pub destination_settler: ContractAddress,
     pub origin_data: Bytes,
 }

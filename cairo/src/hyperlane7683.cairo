@@ -159,7 +159,7 @@ pub mod Hyperlane7683 {
     pub impl Base7686VirtualImpl of Base7683Component::Virtual<ContractState> {
         fn _fill_order(
             ref self: Base7683Component::ComponentState<ContractState>,
-            order_id: felt252,
+            order_id: u256,
             origin_data: @Bytes,
             filler_data: @Bytes,
         ) {
@@ -168,7 +168,7 @@ pub mod Hyperlane7683 {
 
         fn _resolve_onchain_order(
             self: @Base7683Component::ComponentState<ContractState>, order: @OnchainCrossChainOrder,
-        ) -> (ResolvedCrossChainOrder, felt252, felt252) {
+        ) -> (ResolvedCrossChainOrder, u256, felt252) {
             BasicSwapInternalImpl::_resolve_onchain_order(self, order)
         }
 
@@ -176,13 +176,13 @@ pub mod Hyperlane7683 {
             self: @Base7683Component::ComponentState<ContractState>,
             order: @GaslessCrossChainOrder,
             origin_filler_data: @Bytes,
-        ) -> (ResolvedCrossChainOrder, felt252, felt252) {
+        ) -> (ResolvedCrossChainOrder, u256, felt252) {
             BasicSwapInternalImpl::_resolve_gasless_order(self, order, origin_filler_data)
         }
 
         fn _settle_orders(
             ref self: Base7683Component::ComponentState<ContractState>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
             orders_origin_data: @Array<Bytes>,
             orders_filler_data: @Array<Bytes>,
         ) {
@@ -199,7 +199,7 @@ pub mod Hyperlane7683 {
         fn _refund_onchain_orders(
             ref self: Base7683Component::ComponentState<ContractState>,
             orders: @Array<OnchainCrossChainOrder>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
         ) {
             let mut contract_state = self.get_contract_mut();
             BasicSwapInternalImpl::_refund_onchain_orders(
@@ -210,7 +210,7 @@ pub mod Hyperlane7683 {
         fn _refund_gasless_orders(
             ref self: Base7683Component::ComponentState<ContractState>,
             orders: @Array<GaslessCrossChainOrder>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
         ) {
             let mut contract_state = self.get_contract_mut();
             BasicSwapInternalImpl::_refund_gasless_orders(
@@ -219,20 +219,20 @@ pub mod Hyperlane7683 {
         }
 
 
-        fn _local_domain(self: @Base7683Component::ComponentState<ContractState>) -> u64 {
+        fn _local_domain(self: @Base7683Component::ComponentState<ContractState>) -> u32 {
             MailboxClientImpl::get_local_domain(self.get_contract()).into()
         }
 
         fn _get_gasless_order_id(
             self: @Base7683Component::ComponentState<ContractState>, order: @GaslessCrossChainOrder,
-        ) -> felt252 {
+        ) -> u256 {
             let contract_state = self.get_contract();
             BasicSwapInternalImpl::_get_gasless_order_id(contract_state.basic_swap7683, order)
         }
 
         fn _get_onchain_order_id(
             self: @Base7683Component::ComponentState<ContractState>, order: @OnchainCrossChainOrder,
-        ) -> felt252 {
+        ) -> u256 {
             let contract_state = self.get_contract();
             BasicSwapInternalImpl::_get_onchain_order_id(contract_state.basic_swap7683, order)
         }
@@ -249,8 +249,8 @@ pub mod Hyperlane7683 {
         /// - `orders_filler_data`: The filler data for the orders.
         fn _dispatch_settle(
             ref self: BasicSwap7683Component::ComponentState<ContractState>,
-            origin_domain: u64,
-            order_ids: @Array<felt252>,
+            origin_domain: u32,
+            order_ids: @Array<u256>,
             orders_filler_data: @Array<Bytes>,
         ) {
             let mut contract_state = self.get_contract_mut();
@@ -275,8 +275,8 @@ pub mod Hyperlane7683 {
         /// - `order_dds`: The IDs of the orders to refund.
         fn _dispatch_refund(
             ref self: BasicSwap7683Component::ComponentState<ContractState>,
-            origin_domain: u64,
-            order_ids: @Array<felt252>,
+            origin_domain: u32,
+            order_ids: @Array<u256>,
         ) {
             let mut contract_state = self.get_contract_mut();
             contract_state
@@ -291,9 +291,9 @@ pub mod Hyperlane7683 {
 
         fn _handle_settle_order(
             ref self: BasicSwap7683Component::ComponentState<ContractState>,
-            message_origin: u64,
+            message_origin: u32,
             message_sender: ContractAddress,
-            order_id: felt252,
+            order_id: u256,
             receiver: ContractAddress,
         ) {
             let mut contract_state = self.get_contract_mut();
@@ -309,9 +309,9 @@ pub mod Hyperlane7683 {
 
         fn _handle_refund_order(
             ref self: BasicSwap7683Component::ComponentState<ContractState>,
-            message_origin: u64,
+            message_origin: u32,
             message_sender: ContractAddress,
-            order_id: felt252,
+            order_id: u256,
         ) {
             let mut contract_state = self.get_contract_mut();
             BasicSwapInternalImpl::_handle_refund_order(

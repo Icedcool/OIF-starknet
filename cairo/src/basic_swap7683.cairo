@@ -10,6 +10,7 @@ pub trait IBasicSwap7683<TState> {}
 #[starknet::component]
 pub mod BasicSwap7683Component {
     use alexandria_bytes::{Bytes, BytesStore};
+    use core::keccak::compute_keccak_byte_array;
     use core::num::traits::{Bounded, Zero};
     use oif_starknet::base7683::Base7683Component;
     use oif_starknet::base7683::Base7683Component::{OPENED, Virtual};
@@ -19,7 +20,6 @@ pub mod BasicSwap7683Component {
     };
     use oif_starknet::libraries::order_encoder::{OpenOrderEncoder, OrderData, OrderEncoder};
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use permit2::libraries::utils::selector;
     use starknet::storage::{StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
 
@@ -29,8 +29,13 @@ pub mod BasicSwap7683Component {
 
     /// ERRORS ///
     pub mod Errors {
-        pub const INVALID_ORDER_TYPE: felt252 = 'Invalid order type';
-        pub const INVALID_ORIGIN_DOMAIN: felt252 = 'Invalid origin domain';
+        pub fn INVALID_ORDER_TYPE(order_type: felt252) {
+            panic!("Invalid order type: {order_type}");
+        }
+
+        pub fn INVALID_ORIGIN_DOMAIN(origin_domain: u32) {
+            panic!("Invalid origin domain: {origin_domain}");
+        }
         pub const INVALID_ORDER_ID: felt252 = 'Invalid order ID';
         pub const ORDER_FILL_EXPIRED: felt252 = 'Order fill expired';
         pub const INVALID_ORDER_DOMAIN: felt252 = 'Invalid order domain';
@@ -54,7 +59,7 @@ pub mod BasicSwap7683Component {
     /// @param receiver: The address of the order's input token receiver.
     #[derive(Drop, starknet::Event)]
     struct Settled {
-        order_id: felt252,
+        order_id: u256,
         receiver: ContractAddress,
     }
 
@@ -64,7 +69,7 @@ pub mod BasicSwap7683Component {
     /// @param receiver: The address of the order's input token receiver.
     #[derive(Drop, starknet::Event)]
     struct Refunded {
-        order_id: felt252,
+        order_id: u256,
         receiver: ContractAddress,
     }
 
@@ -87,9 +92,9 @@ pub mod BasicSwap7683Component {
         /// -`receiver`: The receiver address.
         fn _handle_settle_order(
             ref self: ComponentState<TContractState>,
-            message_origin: u64,
+            message_origin: u32,
             message_sender: ContractAddress,
-            order_id: felt252,
+            order_id: u256,
             receiver: ContractAddress,
         );
 
@@ -101,9 +106,9 @@ pub mod BasicSwap7683Component {
         /// - `order_id`: The ID of the order to refund.
         fn _handle_refund_order(
             ref self: ComponentState<TContractState>,
-            message_origin: u64,
+            message_origin: u32,
             message_sender: ContractAddress,
-            order_id: felt252,
+            order_id: u256,
         );
 
         /// @dev Should be implemented by the messaging layer for dispatching a settlement
@@ -115,8 +120,8 @@ pub mod BasicSwap7683Component {
         /// - `orders_filler_data`: The filler data for the orders.
         fn _dispatch_settle(
             ref self: ComponentState<TContractState>,
-            origin_domain: u64,
-            order_ids: @Array<felt252>,
+            origin_domain: u32,
+            order_ids: @Array<u256>,
             orders_filler_data: @Array<Bytes>,
         );
 
@@ -127,9 +132,7 @@ pub mod BasicSwap7683Component {
         /// - `origin_domain`: The origin domain of the orders.
         /// - `order_ids`: The IDs of the orders to refund.
         fn _dispatch_refund(
-            ref self: ComponentState<TContractState>,
-            origin_domain: u64,
-            order_ids: @Array<felt252>,
+            ref self: ComponentState<TContractState>, origin_domain: u32, order_ids: @Array<u256>,
         );
     }
 
@@ -149,9 +152,9 @@ pub mod BasicSwap7683Component {
         /// logic or call this function directly.
         fn _handle_settle_order(
             ref self: ComponentState<TContractState>,
-            message_origin: u64,
+            message_origin: u32,
             message_sender: ContractAddress,
-            order_id: felt252,
+            order_id: u256,
             receiver: ContractAddress,
         ) {
             // self._initialize('asdf'.try_into().unwrap());
@@ -176,9 +179,9 @@ pub mod BasicSwap7683Component {
         /// logic or call this function directly.
         fn _handle_refund_order(
             ref self: ComponentState<TContractState>,
-            message_origin: u64,
+            message_origin: u32,
             message_sender: ContractAddress,
-            order_id: felt252,
+            order_id: u256,
         ) {
             let (is_elgible, order_data) = self
                 ._check_order_elgibility(message_origin, message_sender, order_id);
@@ -214,9 +217,9 @@ pub mod BasicSwap7683Component {
         /// structure.
         fn _check_order_elgibility(
             ref self: ComponentState<TContractState>,
-            message_origin: u64,
+            message_origin: u32,
             message_sender: ContractAddress,
-            order_id: felt252,
+            order_id: u256,
         ) -> (bool, OrderData) {
             let mut order: OrderData = Default::default();
 
@@ -275,18 +278,16 @@ pub mod BasicSwap7683Component {
             open_deadline: u64,
             fill_deadline: u64,
             order_data: @Bytes,
-        ) -> (ResolvedCrossChainOrder, felt252, felt252) {
-            assert(
-                order_data_type == OrderEncoder::ORDER_DATA_TYPE_HASH, Errors::INVALID_ORDER_TYPE,
-            );
+        ) -> (ResolvedCrossChainOrder, u256, felt252) {
+            if (order_data_type != OrderEncoder::ORDER_DATA_TYPE_HASH) {
+                Errors::INVALID_ORDER_TYPE(order_data_type);
+            }
 
             let mut order = OrderEncoder::decode(order_data);
-
-            //let c = self.get_contract();
-            //let cc = BasicSwap7683::get_component(c);
-            //let mut basic_swap7683_component = get_dep_component!(cc, BasicSwap7683);
             let local_domain = Virtual::_local_domain(self);
-            assert(order.origin_domain == local_domain, Errors::INVALID_ORIGIN_DOMAIN);
+            if (order.origin_domain != local_domain) {
+                Errors::INVALID_ORIGIN_DOMAIN(order.origin_domain);
+            }
 
             order.fill_deadline = fill_deadline;
             order.sender = sender;
@@ -346,10 +347,10 @@ pub mod BasicSwap7683Component {
         /// Returns: The computed order ID.
         fn _get_order_id(
             ref self: ComponentState<TContractState>, order_data_type: felt252, order_data: Bytes,
-        ) -> felt252 {
-            assert(
-                order_data_type == OrderEncoder::ORDER_DATA_TYPE_HASH, Errors::INVALID_ORDER_TYPE,
-            );
+        ) -> u256 {
+            if (order_data_type != OrderEncoder::ORDER_DATA_TYPE_HASH) {
+                Errors::INVALID_ORDER_TYPE(order_data_type);
+            }
             let order: OrderData = OrderEncoder::decode(@order_data);
             OrderEncoder::id(@order)
         }
@@ -358,15 +359,15 @@ pub mod BasicSwap7683Component {
         /// Gets the ID of a GaslessCrossChainOrder
         fn _get_gasless_order_id(
             self: @ComponentState<TContractState>, order: @GaslessCrossChainOrder,
-        ) -> felt252 {
-            selector((*order.order_data_type, order.order_data).encode().into())
+        ) -> u256 {
+            compute_keccak_byte_array(@(*order.order_data_type, order.order_data).encode().into())
         }
 
         /// Gets the ID of an OnchainCrossChainOrder
         fn _get_onchain_order_id(
             self: @ComponentState<TContractState>, order: @OnchainCrossChainOrder,
-        ) -> felt252 {
-            selector((*order.order_data_type, order.order_data).encode().into())
+        ) -> u256 {
+            compute_keccak_byte_array(@(*order.order_data_type, order.order_data).encode().into())
         }
 
 
@@ -378,7 +379,7 @@ pub mod BasicSwap7683Component {
         /// - `origin_data`: The origin data of the order.
         fn _fill_order(
             ref self: Base7683Component::ComponentState<TContractState>,
-            order_id: felt252,
+            order_id: u256,
             origin_data: @Bytes,
             filler_data: @Bytes,
         ) {
@@ -405,7 +406,7 @@ pub mod BasicSwap7683Component {
         /// -  `orders_filler_data`: The filler data for the orders.
         fn _settle_orders(
             ref self: ComponentState<TContractState>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
             orders_origin_data: @Array<Bytes>,
             orders_filler_data: @Array<Bytes>,
         ) {
@@ -429,7 +430,7 @@ pub mod BasicSwap7683Component {
         fn _refund_onchain_orders(
             ref self: ComponentState<TContractState>,
             orders: @Array<OnchainCrossChainOrder>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
         ) {
             self
                 ._dispatch_refund(
@@ -449,7 +450,7 @@ pub mod BasicSwap7683Component {
         fn _refund_gasless_orders(
             ref self: ComponentState<TContractState>,
             orders: @Array<GaslessCrossChainOrder>,
-            order_ids: @Array<felt252>,
+            order_ids: @Array<u256>,
         ) { // TODO: This should be implemented by the messaging layer
         // The implementing contract should override this through BasicSwapVirtual trait
         }
@@ -468,7 +469,7 @@ pub mod BasicSwap7683Component {
             self: @Base7683Component::ComponentState<TContractState>,
             order: @GaslessCrossChainOrder,
             origin_filler_data: @Bytes,
-        ) -> (ResolvedCrossChainOrder, felt252, felt252) {
+        ) -> (ResolvedCrossChainOrder, u256, felt252) {
             self
                 ._resolved_order(
                     *order.order_data_type,
@@ -491,7 +492,7 @@ pub mod BasicSwap7683Component {
         fn _resolve_onchain_order(
             self: @Base7683Component::ComponentState<TContractState>,
             order: @OnchainCrossChainOrder,
-        ) -> (ResolvedCrossChainOrder, felt252, felt252) {
+        ) -> (ResolvedCrossChainOrder, u256, felt252) {
             self
                 ._resolved_order(
                     *order.order_data_type,

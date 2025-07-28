@@ -11,8 +11,8 @@ pub struct OrderData {
     pub amount_in: u256,
     pub amount_out: u256,
     pub sender_nonce: felt252,
-    pub origin_domain: u64,
-    pub destination_domain: u64,
+    pub origin_domain: u32,
+    pub destination_domain: u32,
     pub destination_settler: ContractAddress,
     pub fill_deadline: u64,
     pub data: Bytes,
@@ -20,7 +20,7 @@ pub struct OrderData {
 
 pub mod OrderEncoder {
     use alexandria_bytes::{Bytes, BytesTrait};
-    use permit2::libraries::utils::selector;
+    use core::keccak::compute_keccak_byte_array;
     use super::OrderData;
 
     pub const ORDER_DATA_TYPE_HASH: felt252 = selector!(
@@ -33,8 +33,8 @@ pub mod OrderEncoder {
     }
 
     /// Compute the ID of an OrderData struct
-    pub fn id(order: @OrderData) -> felt252 {
-        selector(encode(order).into())
+    pub fn id(order: @OrderData) -> u256 {
+        compute_keccak_byte_array(@encode(order).into())
     }
 
 
@@ -63,8 +63,8 @@ pub mod OrderEncoder {
         encoded.append_u256(*amount_in);
         encoded.append_u256(*amount_out);
         encoded.append_felt252(*sender_nonce);
-        encoded.append_u64(*origin_domain); //u64
-        encoded.append_u64(*destination_domain); //u64
+        encoded.append_u32(*origin_domain); //u64
+        encoded.append_u32(*destination_domain); //u64
         encoded.append_address(*destination_settler);
         encoded.append_u64(*fill_deadline);
         encoded.concat(data);
@@ -81,8 +81,8 @@ pub mod OrderEncoder {
         let (offset, amount_in) = order_data.read_u256(offset);
         let (offset, amount_out) = order_data.read_u256(offset);
         let (offset, sender_nonce) = order_data.read_felt252(offset);
-        let (offset, origin_domain) = order_data.read_u64(offset);
-        let (offset, destination_domain) = order_data.read_u64(offset);
+        let (offset, origin_domain) = order_data.read_u32(offset);
+        let (offset, destination_domain) = order_data.read_u32(offset);
         let (offset, destination_settler) = order_data.read_address(offset);
         let (offset, fill_deadline) = order_data.read_u64(offset);
         let (offset, data_size) = order_data.read_usize(offset);

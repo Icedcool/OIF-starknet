@@ -7,6 +7,7 @@ use alexandria_bytes::{Bytes, BytesStore};
 /// Open
 #[derive(Drop, starknet::Event)]
 pub struct Open {
+    #[key]
     pub order_id: u256,
     pub resolved_order: ResolvedCrossChainOrder,
 }

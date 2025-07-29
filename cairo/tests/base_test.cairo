@@ -24,9 +24,11 @@ pub mod BaseTest {
     };
     use permit2::snip12_utils::permits::{TokenPermissionsStructHash, U256StructHash};
     use oif_starknet::erc7683::interface::{
-        Open, GaslessCrossChainOrder, OnchainCrossChainOrder, ResolvedCrossChainOrder,
+        IERC7683ExtraDispatcher, IERC7683ExtraDispatcherTrait, Open, GaslessCrossChainOrder,
+        OnchainCrossChainOrder, ResolvedCrossChainOrder,
     };
     use oif_starknet::base7683::Base7683Component;
+    use oif_starknet::libraries::order_encoder::OpenOrderEncoder;
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 
     use crate::common::{
@@ -58,9 +60,10 @@ pub mod BaseTest {
         karp_key_pair: (felt252, felt252),
         veg_key_pair: (felt252, felt252),
         counter_part: ContractAddress,
-        input_token: ContractAddress, // erc20 dis.
-        output_token: ContractAddress,
-        balance_id: Map<ContractAddress, u256>,
+        input_token: IERC20Dispatcher,
+        output_token: IERC20Dispatcher,
+        balance_id: Map<ContractAddress, usize>,
+        base7683: ContractAddress,
     }
 
 
@@ -321,6 +324,105 @@ pub mod BaseTest {
             assert_eq!(resolved_order.origin_chain_id, origin_chain_id);
             assert_eq!(resolved_order.open_deadline, open_deadline);
             assert_eq!(resolved_order.fill_deadline, fill_deadline);
+        }
+
+        fn _order_data_by_id(self: @ContractState, order_id: u256) -> Bytes {
+            let (_, order_data): (felt252, @Bytes) = IERC7683ExtraDispatcher {
+                contract_address: self.base7683.read(),
+            }
+                .open_orders(order_id)
+                .decode();
+
+            order_data.clone()
+        }
+
+        fn _assert_open_order_inner(
+            self: @ContractState,
+            order_id: u256,
+            sender: ContractAddress,
+            order_data: Bytes,
+            balances_before: Array<u256>,
+            user: ContractAddress,
+        ) {
+            let saved_order_data = Self::_order_data_by_id(self, order_id);
+            let base7683 = IERC7683ExtraDispatcher { contract_address: self.base7683.read() };
+            assert(base7683.is_valid_nonce(sender, 1) == false, 'nonce shd be invalid');
+            assert(saved_order_data == order_data, 'order data does not match');
+            Self::_assert_order(
+                self,
+                order_id,
+                order_data,
+                balances_before,
+                self.input_token.read(),
+                user,
+                base7683.contract_address,
+                base7683.OPENED(),
+                false,
+            );
+        }
+
+        fn _assert_open_order(
+            self: @ContractState,
+            order_id: u256,
+            sender: ContractAddress,
+            order_data: Bytes,
+            balances_before: Array<u256>,
+            user: ContractAddress,
+            native: bool,
+        ) {
+            let saved_order_data = Self::_order_data_by_id(self, order_id);
+            let base7683 = IERC7683ExtraDispatcher { contract_address: self.base7683.read() };
+            assert(base7683.is_valid_nonce(sender, 1) == false, 'nonce shd be invalid');
+            assert(saved_order_data == order_data, 'order data does not match');
+            Self::_assert_order(
+                self,
+                order_id,
+                order_data,
+                balances_before,
+                self.input_token.read(),
+                user,
+                base7683.contract_address,
+                base7683.OPENED(),
+                native,
+            );
+        }
+
+        fn _assert_order(
+            self: @ContractState,
+            order_id: u256,
+            order_data: Bytes,
+            balances_before: Array<u256>,
+            token: IERC20Dispatcher,
+            sender: ContractAddress,
+            to: ContractAddress,
+            expected_status: felt252,
+            native: bool,
+        ) {
+            let saved_order_data = Self::_order_data_by_id(self, order_id);
+            let base7683 = IERC7683ExtraDispatcher { contract_address: self.base7683.read() };
+            let status = base7683.order_status(order_id);
+
+            assert(saved_order_data == order_data, 'order data does not match');
+            assert_eq!(status, expected_status);
+            let balances_after: Array<u256> = if (native) {
+                Self::_balances(self)
+            } else {
+                Self::_token_balances(self, token)
+            };
+
+            assert_eq!(
+                *balances_before.at(self.balance_id.entry(sender).read()) - amount,
+                *balances_after.at(self.balance_id.entry(sender).read()),
+            );
+            assert_eq!(
+                *balances_before.at(self.balance_id.entry(to).read()) + amount,
+                *balances_after.at(self.balance_id.entry(to).read()),
+            );
+        }
+
+        /// PUBLIC ///
+        fn set_base7683(ref self: ContractState, base7683: ContractAddress) {
+            self.base7683.write(base7683);
         }
     }
 }

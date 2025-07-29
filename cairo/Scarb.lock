@@ -61,6 +61,8 @@ dependencies = [
  "contracts",
  "mocks",
  "openzeppelin_access",
+ "openzeppelin_account",
+ "openzeppelin_introspection",
  "openzeppelin_token",
  "openzeppelin_utils",
  "permit2",

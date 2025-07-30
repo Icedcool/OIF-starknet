@@ -1,6 +1,6 @@
-use core::num::traits::{Zero};
-use starknet::ContractAddress;
 use alexandria_bytes::{Bytes, BytesTrait};
+use core::num::traits::Zero;
+use starknet::ContractAddress;
 
 #[derive(Serde, Default, Drop)]
 pub struct OrderData {

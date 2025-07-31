@@ -1,4 +1,4 @@
-use alexandria_bytes::{Bytes, BytesStore};
+use alexandria_bytes::{Bytes, BytesTrait, BytesStore};
 use core::num::traits::Bounded;
 use snforge_std::signature::stark_curve::{
     StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl,
@@ -6,13 +6,19 @@ use snforge_std::signature::stark_curve::{
 use crate::common::pop_event;
 use permit2::snip12_utils::permits::{TokenPermissionsStructHash, U256StructHash};
 use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
-use oif_starknet::base7683::{SpanFelt252StructHash, ArrayFelt252StructHash};
-use oif_starknet::erc7683::interface::{GaslessCrossChainOrder, Open, Base7683ABIDispatcherTrait};
+use oif_starknet::base7683::{
+    SpanFelt252StructHash, ArrayFelt252StructHash, Base7683Component, Base7683Component::Filled,
+};
+use oif_starknet::erc7683::interface::{
+    Output, FilledOrder, GaslessCrossChainOrder, Open, Base7683ABIDispatcherTrait,
+};
 use oif_starknet::libraries::order_encoder::{BytesDefault};
 use openzeppelin_token::erc20::interface::{IERC20DispatcherTrait};
 use snforge_std::{
-    start_cheat_caller_address, start_cheat_caller_address_global, stop_cheat_caller_address_global,
-    stop_cheat_caller_address, spy_events, EventSpyTrait,
+    start_cheat_caller_address, start_cheat_caller_address_global,
+    start_cheat_block_timestamp_global, stop_cheat_block_timestamp_global, EventSpyAssertionsTrait,
+    stop_cheat_caller_address_global, stop_cheat_caller_address, spy_events, EventSpyTrait,
+    EventsFilterTrait,
 };
 use crate::mocks::mock_base7683::{IMockBase7683Dispatcher, IMockBase7683DispatcherTrait};
 use crate::_base_test::{
@@ -22,7 +28,7 @@ use crate::_base_test::{
 
 pub fn setup() -> BaseTestSetup {
     let BaseTestSetup {
-        _base7683,
+        base_full,
         base,
         permit2,
         input_token,
@@ -30,7 +36,7 @@ pub fn setup() -> BaseTestSetup {
         kaka,
         karp,
         veg,
-        counter_part_addr,
+        counterpart,
         origin,
         destination,
         amount,
@@ -42,7 +48,7 @@ pub fn setup() -> BaseTestSetup {
     users.append(base.contract_address);
 
     BaseTestSetup {
-        _base7683,
+        base_full,
         base,
         permit2,
         input_token,
@@ -50,7 +56,7 @@ pub fn setup() -> BaseTestSetup {
         kaka,
         karp,
         veg,
-        counter_part_addr,
+        counterpart,
         origin,
         destination,
         amount,
@@ -97,14 +103,14 @@ fn test_open_works(fill_deadline: u64) {
 
     start_cheat_caller_address(setup.base.contract_address, setup.kaka.account.contract_address);
     assert(
-        setup._base7683.is_valid_nonce(setup.kaka.account.contract_address, 1),
+        setup.base_full.is_valid_nonce(setup.kaka.account.contract_address, 1),
         'Nonce is not valid',
     );
     let balances_before = _balances(setup.input_token, setup.users.clone().into());
 
     /// Open order and catch event
     let mut spy = spy_events();
-    setup._base7683.open(order);
+    setup.base_full.open(order);
     let Open {
         order_id, resolved_order,
     } = pop_event::<Open>(setup.base.contract_address, selector!("Open"), spy.get_events().events);
@@ -115,8 +121,8 @@ fn test_open_works(fill_deadline: u64) {
         setup.kaka.account.contract_address,
         fill_deadline,
         Bounded::<u64>::MAX,
-        setup.base.counter_part_ba(),
-        setup.base.counter_part_ba(),
+        setup.base.counterpart(),
+        setup.base.counterpart(),
         setup.base.local_domain(),
         setup.input_token.contract_address,
         setup.output_token.contract_address,
@@ -139,15 +145,15 @@ fn test_open_works(fill_deadline: u64) {
 #[test]
 #[fuzzer]
 #[should_panic(expected: 'Invalid nonce')]
-fn test_open_invalid_nonce(fill_deadline: u64) {
+fn test_open_INVALID_NONCE(fill_deadline: u64) {
     let setup = setup();
     let order_data: Bytes = Into::<ByteArray, Bytes>::into("some order data");
     let order_type: felt252 = 'some order type';
     let order = _prepare_onchain_order(order_data.clone(), fill_deadline, order_type);
 
     start_cheat_caller_address(setup.base.contract_address, setup.kaka.account.contract_address);
-    setup._base7683.invalidate_nonces(1);
-    setup._base7683.open(order);
+    setup.base_full.invalidate_nonces(1);
+    setup.base_full.open(order);
     stop_cheat_caller_address(setup.input_token.contract_address);
 }
 
@@ -155,10 +161,11 @@ fn test_open_invalid_nonce(fill_deadline: u64) {
 #[fuzzer]
 fn test_open_for_works(mut open_deadline: u64, fill_deadline: u64) {
     let setup = setup();
-    if (open_deadline <= starknet::get_block_timestamp()) {
-        open_deadline += starknet::get_block_timestamp();
-    }
 
+    // Assume block.timestamp < open_deadline
+    start_cheat_block_timestamp_global(open_deadline - 1);
+
+    // Approve base to spend input token
     start_cheat_caller_address(
         setup.input_token.contract_address, setup.kaka.account.contract_address,
     );
@@ -172,8 +179,8 @@ fn test_open_for_works(mut open_deadline: u64, fill_deadline: u64) {
         order_data.clone(), nonce, open_deadline, fill_deadline, order_data_type, setup.clone(),
     );
     let witness = setup
-        ._base7683
-        .witness_hash(setup._base7683.resolve_for(order.clone(), Default::default()));
+        .base_full
+        .witness_hash(setup.base_full.resolve_for(order.clone(), Default::default()));
     let sig = _get_signature(
         setup.kaka,
         setup.base.contract_address,
@@ -183,17 +190,17 @@ fn test_open_for_works(mut open_deadline: u64, fill_deadline: u64) {
         open_deadline,
         setup.clone(),
     );
+    let balances_before = _balances(setup.input_token, setup.users.clone().into());
 
     assert(
-        setup._base7683.is_valid_nonce(setup.kaka.account.contract_address, nonce),
-        'Nonce is not valid',
+        setup.base_full.is_valid_nonce(setup.kaka.account.contract_address, nonce),
+        'Nonce shd be valid',
     );
-    let balances_before = _balances(setup.input_token, setup.users.clone().into());
 
     /// Open order and catch event
     let mut spy = spy_events();
     start_cheat_caller_address(setup.base.contract_address, setup.karp.account.contract_address);
-    setup._base7683.open_for(order, sig, Default::default());
+    setup.base_full.open_for(order, sig, Default::default());
     let Open {
         order_id, resolved_order,
     } = pop_event::<Open>(setup.base.contract_address, selector!("Open"), spy.get_events().events);
@@ -204,8 +211,8 @@ fn test_open_for_works(mut open_deadline: u64, fill_deadline: u64) {
         setup.kaka.account.contract_address,
         fill_deadline,
         open_deadline,
-        setup.base.counter_part_ba(),
-        setup.base.counter_part_ba(),
+        setup.base.counterpart(),
+        setup.base.counterpart(),
         setup.base.local_domain(),
         setup.input_token.contract_address,
         setup.output_token.contract_address,
@@ -222,5 +229,296 @@ fn test_open_for_works(mut open_deadline: u64, fill_deadline: u64) {
     );
 
     stop_cheat_caller_address(setup.base.contract_address);
+    stop_cheat_block_timestamp_global();
 }
+
+#[test]
+#[fuzzer]
+#[should_panic(expected: 'Order open expired')]
+fn test_open_for_ORDER_OPEN_EXPIRED(mut open_deadline: u64, fill_deadline: u64) {
+    let setup = setup();
+
+    // Assume block.timestamp > open_deadline
+    start_cheat_block_timestamp_global(open_deadline + 1);
+    let nonce = 0;
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_data_type = 'some order data';
+    let order = _prepare_gasless_order(
+        order_data.clone(), nonce, open_deadline, fill_deadline, order_data_type, setup.clone(),
+    );
+    let sig: Array<felt252> = array![];
+    let origin_filler_data: Bytes = Default::default();
+
+    /// Open order and catch event
+    start_cheat_caller_address(setup.base.contract_address, setup.karp.account.contract_address);
+    setup.base_full.open_for(order, sig, origin_filler_data);
+    stop_cheat_caller_address(setup.base.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+#[fuzzer]
+#[should_panic(expected: 'Invalid gasless order settler')]
+fn test_open_for_INVALID_GASLESS_ORDER_SETTLER(mut open_deadline: u64, fill_deadline: u64) {
+    let setup = setup();
+
+    // Assume block.timestamp < open_deadline
+    start_cheat_block_timestamp_global(open_deadline - 1);
+    let nonce = 0;
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_data_type = 'some order data';
+    let mut order = _prepare_gasless_order(
+        order_data.clone(), nonce, open_deadline, fill_deadline, order_data_type, setup.clone(),
+    );
+    order.origin_settler = 'other'.try_into().unwrap();
+    let sig: Array<felt252> = array![];
+    let origin_filler_data: Bytes = Default::default();
+
+    /// Open order and catch event
+    start_cheat_caller_address(setup.base.contract_address, setup.karp.account.contract_address);
+    setup.base_full.open_for(order, sig, origin_filler_data);
+    stop_cheat_caller_address(setup.base.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+#[fuzzer]
+#[should_panic(expected: 'Invalid gasless order origin')]
+fn test_open_for_INVALID_GASLESS_ORDER_ORIGIN(mut open_deadline: u64, fill_deadline: u64) {
+    let setup = setup();
+
+    // Assume block.timestamp < open_deadline
+    start_cheat_block_timestamp_global(open_deadline - 1);
+    let nonce = 0;
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_data_type = 'some order data';
+    let mut order = _prepare_gasless_order(
+        order_data.clone(), nonce, open_deadline, fill_deadline, order_data_type, setup.clone(),
+    );
+    order.origin_chain_id = 3;
+    let sig: Array<felt252> = array![];
+    let origin_filler_data: Bytes = Default::default();
+
+    /// Open order and catch event
+    start_cheat_caller_address(setup.base.contract_address, setup.karp.account.contract_address);
+    setup.base_full.open_for(order, sig, origin_filler_data);
+    stop_cheat_caller_address(setup.base.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+#[fuzzer]
+#[should_panic(expected: 'Invalid nonce')]
+fn test_open_for_INVALID_NONCE(mut open_deadline: u64, fill_deadline: u64) {
+    let setup = setup();
+
+    // Assume block.timestamp < open_deadline
+    start_cheat_block_timestamp_global(open_deadline - 1);
+    let nonce = 0;
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_data_type = 'some order data';
+    let mut order = _prepare_gasless_order(
+        order_data.clone(), nonce, open_deadline, fill_deadline, order_data_type, setup.clone(),
+    );
+    start_cheat_caller_address(setup.base.contract_address, setup.kaka.account.contract_address);
+    setup.base_full.invalidate_nonces(1);
+    stop_cheat_caller_address(setup.base.contract_address);
+    let sig: Array<felt252> = array![];
+    let origin_filler_data: Bytes = Default::default();
+
+    /// Open order and catch event
+    start_cheat_caller_address(setup.base.contract_address, setup.karp.account.contract_address);
+    setup.base_full.open_for(order, sig, origin_filler_data);
+    stop_cheat_caller_address(setup.base.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+#[fuzzer]
+fn test_resolve_works(fill_deadline: u64) {
+    let setup = setup();
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_data_type = 'some order data';
+    let order = _prepare_onchain_order(order_data.clone(), fill_deadline, order_data_type);
+
+    start_cheat_caller_address(setup.base.contract_address, setup.kaka.account.contract_address);
+    let resolved_order = setup.base_full.resolve(order.clone());
+
+    _assert_resolved_order(
+        resolved_order,
+        order_data.clone(),
+        setup.kaka.account.contract_address,
+        fill_deadline,
+        Bounded::<u64>::MAX,
+        setup.base.counterpart(),
+        setup.base.counterpart(),
+        setup.base.local_domain(),
+        setup.input_token.contract_address,
+        setup.output_token.contract_address,
+        setup.clone(),
+    );
+
+    stop_cheat_caller_address(setup.base.contract_address);
+}
+
+#[test]
+#[fuzzer]
+fn test_resolve_for_works(mut open_deadline: u64, fill_deadline: u64) {
+    let setup = setup();
+    let nonce = 0;
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_data_type = 'some order data';
+    let order = _prepare_gasless_order(
+        order_data.clone(), nonce, open_deadline, fill_deadline, order_data_type, setup.clone(),
+    );
+    let origin_filler_data: Bytes = Default::default();
+
+    start_cheat_caller_address(setup.base.contract_address, setup.karp.account.contract_address);
+    let resolved_order = setup.base_full.resolve_for(order.clone(), origin_filler_data.clone());
+
+    _assert_resolved_order(
+        resolved_order,
+        order_data,
+        setup.kaka.account.contract_address,
+        fill_deadline,
+        open_deadline,
+        setup.base.counterpart(),
+        setup.base.counterpart(),
+        setup.base.local_domain(),
+        setup.input_token.contract_address,
+        setup.output_token.contract_address,
+        setup.clone(),
+    );
+    stop_cheat_caller_address(setup.base.contract_address);
+}
+
+#[test]
+fn test_fill_works() {
+    let setup = setup();
+
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_id = 123_u256;
+    let mut filler_data: Bytes = BytesTrait::new_empty();
+    filler_data.append_address(setup.veg.account.contract_address);
+
+    let mut spy = spy_events();
+
+    start_cheat_caller_address(setup.base.contract_address, setup.veg.account.contract_address);
+    setup.base_full.fill(order_id, order_data.clone(), filler_data.clone());
+    let FilledOrder {
+        origin_data: _origin_data, filler_data: _filler_data,
+    } = setup.base_full.filled_orders(order_id);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    setup.base.contract_address,
+                    Base7683Component::Event::Filled(
+                        Base7683Component::Filled {
+                            order_id,
+                            origin_data: order_data.clone(),
+                            filler_data: filler_data.clone(),
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    assert_eq!(setup.base_full.order_status(order_id), setup.base_full.FILLED());
+
+    assert(_origin_data == order_data, 'Origin data does not match');
+    assert(_filler_data == filler_data, 'Filler data does not match');
+
+    assert_eq!(setup.base.filled_id(), order_id);
+    assert(setup.base.filled_origin_data() == order_data, 'Origin data does not match');
+    assert(setup.base.filled_filler_data() == filler_data, 'Filler data does not match');
+
+    stop_cheat_caller_address(setup.base.contract_address);
+}
+
+#[test]
+#[should_panic(expected: 'Invalid order status')]
+fn test_fill_INVALID_ORDER_STATUS_FILLED() {
+    let setup = setup();
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_id = 123_u256;
+    let mut filler_data: Bytes = BytesTrait::new_empty();
+    filler_data.append_address(setup.veg.account.contract_address);
+
+    start_cheat_caller_address(setup.base.contract_address, setup.veg.account.contract_address);
+
+    // Try to fill the order a second time
+    setup.base_full.fill(order_id, order_data.clone(), filler_data.clone());
+    setup.base_full.fill(order_id, order_data.clone(), filler_data.clone());
+
+    stop_cheat_caller_address(setup.base.contract_address);
+}
+
+#[test]
+#[fuzzer]
+#[should_panic(expected: 'Invalid order status')]
+fn test_fill_INVALID_ORDER_STATUS_OPENED(fill_deadline: u64) {
+    let setup = setup();
+    let order_data = Into::<ByteArray, Bytes>::into("some order data");
+    let order_id = 'someId'.into();
+    let order_type: felt252 = 'some order type';
+    let order = _prepare_onchain_order(order_data.clone(), fill_deadline, order_type);
+
+    // Open order
+    start_cheat_caller_address(
+        setup.input_token.contract_address, setup.kaka.account.contract_address,
+    );
+    setup.input_token.approve(setup.base.contract_address, setup.amount);
+    stop_cheat_caller_address(setup.input_token.contract_address);
+
+    start_cheat_caller_address(setup.base.contract_address, setup.kaka.account.contract_address);
+    setup.base_full.open(order); // fails
+    stop_cheat_caller_address(setup.base.contract_address);
+
+    // Try to fill open order
+    start_cheat_caller_address(setup.base.contract_address, setup.veg.account.contract_address);
+    let mut filler_data: Bytes = BytesTrait::new_empty();
+    filler_data.append_address(setup.veg.account.contract_address);
+    setup.base_full.fill(order_id, order_data.clone(), filler_data.clone());
+    stop_cheat_caller_address(setup.base.contract_address);
+}
+
+#[test]
+fn test_settle_works() {}
+
+#[test]
+fn test_settle_multiple_works() {}
+
+#[test]
+#[should_panic(expected: 'Invalid order status')]
+fn test_settle_INVALID_ORDER_STATUS() {}
+
+#[test]
+fn test_refund_onChain_works() {}
+
+#[test]
+fn test_refund_multi_onChain_works() {}
+
+#[test]
+#[should_panic(expected: 'Invalid order status')]
+fn test_refund_onChain_INVALID_ORDER_STATUS() {}
+
+#[test]
+#[should_panic(expected: 'Order fill not expired')]
+fn test_refund_onChain_ORDER_FILL_NOT_EXPIRED() {}
+
+#[test]
+fn test_refund_gasless_works() {}
+
+#[test]
+fn test_refund_multi_gasless_work() {}
+
+#[test]
+#[should_panic(expected: 'Invalid order status')]
+fn test_refund_gasless_INVALID_ORDER_STATUS() {}
+
+#[test]
+#[should_panic(expected: 'Order fill not expired')]
+fn test_refund_gasless_ORDER_FILL_NOT_EXPIRED() {}
 

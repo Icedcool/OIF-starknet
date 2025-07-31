@@ -36,7 +36,7 @@ use crate::mocks::mock_base7683::{IMockBase7683Dispatcher, IMockBase7683Dispatch
 
 #[derive(Drop, Clone)]
 pub struct BaseTestSetup {
-    pub _base7683: Base7683ABIDispatcher,
+    pub base_full: Base7683ABIDispatcher,
     pub base: IMockBase7683Dispatcher,
     pub permit2: ContractAddress,
     pub input_token: IERC20Dispatcher,
@@ -44,7 +44,7 @@ pub struct BaseTestSetup {
     pub kaka: Account,
     pub karp: Account,
     pub veg: Account,
-    pub counter_part_addr: ContractAddress,
+    pub counterpart: ContractAddress,
     pub origin: u32,
     pub destination: u32,
     pub amount: u256,
@@ -58,21 +58,21 @@ pub fn setup() -> BaseTestSetup {
     let _eth = deploy_eth();
     let input_token = deploy_erc20("Input Token", "IN");
     let output_token = deploy_erc20("Output Token", "OUT");
-    let _base7683 = deploy_mock_base7683(
+    let base = deploy_mock_base7683(
         permit2, 1, 2, input_token.contract_address, output_token.contract_address,
     );
+    let base_full = Base7683ABIDispatcher { contract_address: base.contract_address };
 
     let DOMAIN_SEPARATOR = IPermit2Dispatcher { contract_address: permit2 }.DOMAIN_SEPARATOR();
-    let base = IMockBase7683Dispatcher { contract_address: _base7683.contract_address };
     let kaka = generate_account();
     let karp = generate_account();
     let veg = generate_account();
-    let counter_part_addr: ContractAddress = 'counterpart'.try_into().unwrap();
+    let counterpart: ContractAddress = 'counterpart'.try_into().unwrap();
     let users = array![
         kaka.account.contract_address,
         karp.account.contract_address,
         veg.account.contract_address,
-        counter_part_addr,
+        counterpart,
     ];
 
     deal_multiple(
@@ -91,7 +91,7 @@ pub fn setup() -> BaseTestSetup {
     );
 
     BaseTestSetup {
-        _base7683,
+        base_full,
         base,
         permit2,
         input_token,
@@ -99,7 +99,7 @@ pub fn setup() -> BaseTestSetup {
         kaka,
         karp,
         veg,
-        counter_part_addr,
+        counterpart,
         origin: 1,
         destination: 2,
         amount: 100,
@@ -285,7 +285,7 @@ pub fn _assert_resolved_order(
 }
 
 pub fn _order_data_by_id(order_id: u256, setup: BaseTestSetup) -> Bytes {
-    let (_, order_data): (felt252, @Bytes) = setup._base7683.open_orders(order_id).decode();
+    let (_, order_data): (felt252, @Bytes) = setup.base_full.open_orders(order_id).decode();
 
     order_data.clone()
 }
@@ -314,7 +314,7 @@ pub fn _assert_open_order_native_option(
 ) {
     let saved_order_data = _order_data_by_id(order_id, setup.clone());
 
-    assert(setup._base7683.is_valid_nonce(sender, 1) == false, 'nonce shd be invalid');
+    assert(setup.base_full.is_valid_nonce(sender, 1) == false, 'nonce shd be invalid');
     assert(saved_order_data == order_data, 'order data does not match');
     _assert_order(
         order_id,
@@ -323,7 +323,7 @@ pub fn _assert_open_order_native_option(
         setup.input_token,
         user,
         setup.base.contract_address,
-        setup._base7683.OPENED(),
+        setup.base_full.OPENED(),
         native,
         setup,
     );
@@ -333,7 +333,7 @@ pub fn _balance_id(user: ContractAddress, setup: BaseTestSetup) -> usize {
     let kaka = setup.kaka.account.contract_address;
     let karp = setup.karp.account.contract_address;
     let veg = setup.veg.account.contract_address;
-    let counter_part = setup.counter_part_addr;
+    let counter_part = setup.counterpart;
     let base = setup.base.contract_address;
 
     if user == kaka {
@@ -363,7 +363,7 @@ pub fn _assert_order(
     setup: BaseTestSetup,
 ) {
     let saved_order_data = _order_data_by_id(order_id, setup.clone());
-    let status = setup._base7683.order_status(order_id);
+    let status = setup.base_full.order_status(order_id);
 
     assert(saved_order_data == order_data, 'order data does not match');
     assert_eq!(status, expected_status);

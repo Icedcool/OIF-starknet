@@ -41,9 +41,9 @@ pub mod Base7683Component {
     pub mod Errors {
         pub const ORDER_OPEN_EXPIRED: felt252 = 'Order open expired';
         pub const INVALID_ORDER_STATUS: felt252 = 'Invalid order status';
-        pub const INVALID_GASSLESS_ORDER_SETTLER: felt252 = 'Invalid gasless order settler';
+        pub const INVALID_GASLESS_ORDER_SETTLER: felt252 = 'Invalid gasless order settler';
         pub const INVALID_NONCE: felt252 = 'Invalid nonce';
-        pub const INVALID_ORDER_ORIGIN: felt252 = 'Invalid order origin';
+        pub const INVALID_GASLESS_ORDER_ORIGIN: felt252 = 'Invalid gasless order origin';
         pub const ORDER_FILL_NOT_EXPIRED: felt252 = 'Order fill not expired';
         pub const INVALID_NATIVE_AMOUNT: felt252 = 'Invalid native amount';
     }
@@ -75,10 +75,10 @@ pub mod Base7683Component {
     /// param origin_data: The origin-specific data for the order.
     /// param filler_data: The filler-specific data for the order.
     #[derive(Drop, starknet::Event)]
-    struct Filled {
-        order_id: u256,
-        origin_data: Bytes,
-        filler_data: Bytes,
+    pub struct Filled {
+        pub order_id: u256,
+        pub origin_data: Bytes,
+        pub filler_data: Bytes,
     }
 
     /// Emitted when a batch of orders is settled.
@@ -123,9 +123,11 @@ pub mod Base7683Component {
             assert(get_block_timestamp().into() < order.open_deadline, Errors::ORDER_OPEN_EXPIRED);
             assert(
                 order.origin_settler == get_contract_address(),
-                Errors::INVALID_GASSLESS_ORDER_SETTLER,
+                Errors::INVALID_GASLESS_ORDER_SETTLER,
             );
-            assert(order.origin_chain_id == self._local_domain(), Errors::INVALID_ORDER_ORIGIN);
+            assert(
+                order.origin_chain_id == self._local_domain(), Errors::INVALID_GASLESS_ORDER_ORIGIN,
+            );
 
             let (mut resolved_order, order_id, nonce) = self
                 ._resolve_gasless_order(@order, @origin_filler_data);

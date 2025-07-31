@@ -57,7 +57,7 @@ pub fn deploy_mock_base7683(
     remote: u32,
     input_token: ContractAddress,
     output_token: ContractAddress,
-) -> Base7683ABIDispatcher {
+) -> IMockBase7683Dispatcher {
     let contract = declare("MockBase7683").unwrap().contract_class();
     let mut ctor_calldata: Array<felt252> = array![];
     permit2.serialize(ref ctor_calldata);
@@ -70,7 +70,7 @@ pub fn deploy_mock_base7683(
         .deploy(@ctor_calldata)
         .expect('mock permit2 deployment failed');
 
-    Base7683ABIDispatcher { contract_address }
+    IMockBase7683Dispatcher { contract_address }
 }
 
 

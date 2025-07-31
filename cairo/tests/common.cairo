@@ -1,13 +1,19 @@
-use crate::mocks::mock_erc20::MockERC20;
-use crate::mocks::interfaces::{IMintableDispatcher, IMintableDispatcherTrait};
-use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-use starknet::{ContractAddress, ClassHash};
-use snforge_std::signature::{KeyPair, KeyPairTrait};
-use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
+use oif_starknet::erc7683::interface::{Base7683ABIDispatcher, Base7683ABIDispatcherTrait};
 use openzeppelin_account::interface::AccountABIDispatcher;
+use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+use core::dict::Felt252Dict;
+use core::num::traits::Pow;
 use snforge_std::signature::stark_curve::{
     StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl,
 };
+use snforge_std::signature::{KeyPair, KeyPairTrait};
+use snforge_std::{Event, ContractClassTrait, DeclareResultTrait, declare};
+use starknet::{ClassHash, ContractAddress};
+use starknet::event::Event as _Event;
+use crate::mocks::mock_erc20::{MockERC20};
+use crate::mocks::mock_base7683::{IMockBase7683Dispatcher, IMockBase7683DispatcherTrait};
+use crate::mocks::interfaces::{IMintableDispatcher, IMintableDispatcherTrait};
+use permit2::interfaces::permit2::{IPermit2Dispatcher, IPermit2DispatcherTrait};
 
 pub fn ETH_ADDRESS() -> ContractAddress {
     0x049D36570D4e46f48e99674bd3fcc84644DdD6b96F7C741B1562B82f9e004dC7.try_into().unwrap()
@@ -15,7 +21,11 @@ pub fn ETH_ADDRESS() -> ContractAddress {
 
 pub fn deploy_eth() -> IERC20Dispatcher {
     let mock_erc20_contract = declare("MockERC20").unwrap().contract_class();
-    let ctor_calldata: Array<felt252> = array!['Ethereum', 'ETH'];
+    let mut ctor_calldata: Array<felt252> = array![];
+    let name: ByteArray = "Ethereum";
+    let symbol: ByteArray = "ETH";
+    name.serialize(ref ctor_calldata);
+    symbol.serialize(ref ctor_calldata);
 
     let (erc20_address, _) = mock_erc20_contract.deploy_at(@ctor_calldata, ETH_ADDRESS()).unwrap();
     IERC20Dispatcher { contract_address: erc20_address }
@@ -28,6 +38,7 @@ pub fn deploy_erc20(name: ByteArray, symbol: ByteArray) -> IERC20Dispatcher {
     symbol.serialize(ref ctor_calldata);
 
     let (erc20_address, _) = mock_erc20_contract.deploy(@ctor_calldata).unwrap();
+
     IERC20Dispatcher { contract_address: erc20_address }
 }
 
@@ -39,6 +50,29 @@ pub fn deploy_permit2() -> ContractAddress {
 
     mock_permit2_address
 }
+
+pub fn deploy_mock_base7683(
+    permit2: ContractAddress,
+    local: u32,
+    remote: u32,
+    input_token: ContractAddress,
+    output_token: ContractAddress,
+) -> Base7683ABIDispatcher {
+    let contract = declare("MockBase7683").unwrap().contract_class();
+    let mut ctor_calldata: Array<felt252> = array![];
+    permit2.serialize(ref ctor_calldata);
+    local.serialize(ref ctor_calldata);
+    remote.serialize(ref ctor_calldata);
+    input_token.serialize(ref ctor_calldata);
+    output_token.serialize(ref ctor_calldata);
+
+    let (contract_address, _) = contract
+        .deploy(@ctor_calldata)
+        .expect('mock permit2 deployment failed');
+
+    Base7683ABIDispatcher { contract_address }
+}
+
 
 pub fn deal(token: ContractAddress, to: ContractAddress, amount: u256) {
     IMintableDispatcher { contract_address: token }.mint(to, amount);
@@ -70,25 +104,27 @@ pub fn generate_account() -> Account {
 }
 
 /// Utils ///
+pub fn pop_event<T, +Drop<T>, +Default<T>, +PartialEq<T>, impl TEvent: starknet::Event<T>>(
+    target: ContractAddress, selector: felt252, events: Array<(ContractAddress, Event)>,
+) -> T {
+    let mut popped: T = Default::default();
+    for (source, e) in events {
+        if (source == target) {
+            let Event { mut keys, mut data } = e;
+            if (*keys[0] == selector) {
+                let _ = keys.pop_front();
+                let mut keys = keys.span();
+                let mut data = data.span();
 
-// Pop the earliest unpopped logged event for the contract as the requested type
-// and checks there's no more data left on the event, preventing unaccounted params.
-// Indexed event members are currently not supported, so they are ignored.
-pub fn pop_log<T, +Drop<T>, impl TEvent: starknet::Event<T>>(
-    address: ContractAddress,
-) -> Option<T> {
-    let (mut keys, mut data) = starknet::testing::pop_log_raw(starknet::get_contract_address())
-        .expect('No logs found');
-    //println!("keys: {:?}\ndata: {:?}", keys.clone(), data.clone());
-    let ret = starknet::Event::deserialize(ref keys, ref data);
-    assert(data.is_empty(), 'Event has extra data');
-    ret
+                popped = _Event::<T>::deserialize(ref keys, ref data)
+                    .expect('Failed to build event');
+            }
+        }
+    };
+
+    if (popped == Default::default()) {
+        panic!("Failed to find event")
+    }
+
+    popped
 }
-
-pub fn pop_log_raw(address: ContractAddress) -> (Span<felt252>, Span<felt252>) {
-    let (mut keys, mut data) = starknet::testing::pop_log_raw(starknet::get_contract_address())
-        .expect('No logs found');
-
-    (keys, data)
-}
-

@@ -13,7 +13,7 @@ pub mod BasicSwap7683Component {
     use core::keccak::compute_keccak_byte_array;
     use core::num::traits::{Bounded, Zero};
     use oif_starknet::base7683::Base7683Component;
-    use oif_starknet::base7683::Base7683Component::{OPENED, Virtual};
+    use oif_starknet::base7683::Base7683Component::{OPENED, Virtual as BaseVirtual};
     use oif_starknet::erc7683::interface::{
         FillInstruction, GaslessCrossChainOrder, OnchainCrossChainOrder, Output,
         ResolvedCrossChainOrder,
@@ -74,10 +74,9 @@ pub mod BasicSwap7683Component {
     }
 
     /// VIRTUAL ///
-    pub trait BasicSwapVirtual<
+    pub trait Virtual<
         TContractState,
-        +Virtual<TContractState>,
-        //+BasicSwap7683Virtual2<TContractState>,
+        +BaseVirtual<TContractState>,
         impl Base7683: Base7683Component::HasComponent<TContractState>,
         +HasComponent<TContractState>,
         +Drop<TContractState>,
@@ -146,11 +145,11 @@ pub mod BasicSwap7683Component {
         TContractState,
         impl Base7683: Base7683Component::HasComponent<TContractState>,
         impl BasicSwap7683: HasComponent<TContractState>,
-        +Virtual<TContractState>,
         +Drop<TContractState>,
-        +BasicSwapVirtual<TContractState>,
+        +BaseVirtual<TContractState>,
+        +Virtual<TContractState>,
     > of InternalTrait<TContractState> {
-        /// This is the default implementation of BasicSwapVirtual::_handle_settle_order
+        /// This is the default implementation of BasicSwap7683::Virtual::_handle_settle_order
         /// @dev Due to virtual components not being able to call internal functions, the
         /// implementing contract will need to either override the virtual function with custom
         /// logic or call this function directly.
@@ -177,7 +176,7 @@ pub mod BasicSwap7683Component {
             self.emit(Settled { order_id, receiver });
         }
 
-        /// This is the default implementation of BasicSwapVirtual::_handle_refund_order
+        /// This is the default implementation of BasicSwap7683::Virtual::_handle_refund_order
         /// @dev Due to virtual components not being able to call internal functions, the
         /// implementing contract will need to either override the virtual function with custom
         /// logic or call this function directly.
@@ -288,7 +287,7 @@ pub mod BasicSwap7683Component {
             }
 
             let mut order = OrderEncoder::decode(order_data);
-            let local_domain = Virtual::_local_domain(self);
+            let local_domain = BaseVirtual::_local_domain(self);
             if (order.origin_domain != local_domain) {
                 Errors::INVALID_ORIGIN_DOMAIN(order.origin_domain);
             }
@@ -350,7 +349,7 @@ pub mod BasicSwap7683Component {
         ///
         /// Returns: The computed order ID.
         fn _get_order_id(
-            ref self: ComponentState<TContractState>, order_data_type: felt252, order_data: Bytes,
+            self: @ComponentState<TContractState>, order_data_type: felt252, order_data: Bytes,
         ) -> u256 {
             if (order_data_type != OrderEncoder::ORDER_DATA_TYPE_HASH) {
                 Errors::INVALID_ORDER_TYPE(order_data_type);

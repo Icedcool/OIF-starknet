@@ -200,7 +200,7 @@ pub mod Hyperlane7683 {
     }
 
     /// BASIC SWAP OVERRIDES ///
-    impl BasicSwapVirtualImpl of BasicSwap7683Component::BasicSwapVirtual<ContractState> {
+    impl BasicSwap7683VirtualImpl of BasicSwap7683Component::Virtual<ContractState> {
         /// Dispatches a settlement message to the specified domain.
         /// @dev Encodes the settle message using Hyperlane7683Message and dispatches it via the
         /// GasRouter.
@@ -308,7 +308,7 @@ pub mod Hyperlane7683 {
                             .unbox()
                             .read_address(0);
 
-                        BasicSwapVirtualImpl::_handle_settle_order(
+                        BasicSwap7683VirtualImpl::_handle_settle_order(
                             ref contract_state.basic_swap7683,
                             origin.try_into().unwrap(),
                             sender.try_into().unwrap(),
@@ -317,7 +317,7 @@ pub mod Hyperlane7683 {
                         );
                     },
                     false => {
-                        BasicSwapVirtualImpl::_handle_refund_order(
+                        BasicSwap7683VirtualImpl::_handle_refund_order(
                             ref contract_state.basic_swap7683,
                             origin.try_into().unwrap(),
                             sender.try_into().unwrap(),

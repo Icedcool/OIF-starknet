@@ -77,6 +77,13 @@ pub trait IDestinationSettler<TState> {
 }
 
 #[starknet::interface]
+pub trait IBasicSwapExtra<TState> {
+    fn SETTLED(self: @TState) -> felt252;
+    fn REFUNDED(self: @TState) -> felt252;
+}
+
+
+#[starknet::interface]
 pub trait IERC7683Extra<TState> {
     /// READS ///
     fn UNKNOWN(self: @TState) -> felt252;
@@ -158,7 +165,6 @@ pub trait Base7683ABI<TState> {
     fn UNKNOWN(self: @TState) -> felt252;
     fn OPENED(self: @TState) -> felt252;
     fn FILLED(self: @TState) -> felt252;
-
     fn witness_hash(self: @TState, resolved_order: ResolvedCrossChainOrder) -> felt252;
     fn used_nonces(self: @TState, user: ContractAddress, nonce: felt252) -> bool;
     fn open_orders(self: @TState, order_id: u256) -> Bytes;
@@ -173,6 +179,10 @@ pub trait Base7683ABI<TState> {
         ref self: TState, orders: Array<OnchainCrossChainOrder>, value: u256,
     );
     fn invalidate_nonces(ref self: TState, nonce: felt252);
+
+    // basic swap
+    fn SETTLED(self: @TState) -> felt252;
+    fn REFUNDED(self: @TState) -> felt252;
 }
 
 

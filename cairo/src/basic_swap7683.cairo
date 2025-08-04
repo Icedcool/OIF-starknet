@@ -1,6 +1,3 @@
-#[starknet::interface]
-pub trait IBasicSwap7683<TState> {}
-
 /// @title BasicSwap7683 (Cairo)
 /// @author BootNode (translation by Nethermind)
 /// @notice This contract builds on top of Base7683 as a second layer, implementing logic to handle
@@ -16,7 +13,7 @@ pub mod BasicSwap7683Component {
     use oif_starknet::base7683::Base7683Component::{OPENED, Virtual as BaseVirtual};
     use oif_starknet::erc7683::interface::{
         FillInstruction, GaslessCrossChainOrder, OnchainCrossChainOrder, Output,
-        ResolvedCrossChainOrder,
+        ResolvedCrossChainOrder, IBasicSwapExtra,
     };
     use oif_starknet::libraries::order_encoder::{OpenOrderEncoder, OrderData, OrderEncoder};
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
@@ -58,9 +55,9 @@ pub mod BasicSwap7683Component {
     /// @param order_id: The ID of the settled order.
     /// @param receiver: The address of the order's input token receiver.
     #[derive(Drop, starknet::Event)]
-    struct Settled {
-        order_id: u256,
-        receiver: ContractAddress,
+    pub struct Settled {
+        pub order_id: u256,
+        pub receiver: ContractAddress,
     }
 
 
@@ -68,9 +65,9 @@ pub mod BasicSwap7683Component {
     /// @param order_id: The ID of the refunded order.
     /// @param receiver: The address of the order's input token receiver.
     #[derive(Drop, starknet::Event)]
-    struct Refunded {
-        order_id: u256,
-        receiver: ContractAddress,
+    pub struct Refunded {
+        pub order_id: u256,
+        pub receiver: ContractAddress,
     }
 
     /// VIRTUAL ///
@@ -511,6 +508,19 @@ pub mod BasicSwap7683Component {
                     *order.fill_deadline,
                     order.order_data,
                 )
+        }
+    }
+
+    #[embeddable_as(BasicSwapExtraImpl)]
+    pub impl BasicSwapExtra<
+        TContractState, +HasComponent<TContractState>,
+    > of IBasicSwapExtra<ComponentState<TContractState>> {
+        fn REFUNDED(self: @ComponentState<TContractState>) -> felt252 {
+            REFUNDED
+        }
+
+        fn SETTLED(self: @ComponentState<TContractState>) -> felt252 {
+            SETTLED
         }
     }
 }

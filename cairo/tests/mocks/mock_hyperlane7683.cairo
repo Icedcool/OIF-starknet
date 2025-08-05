@@ -11,7 +11,7 @@ pub trait IMockHyperlane7683<TState> {
     fn settled_message_origin(self: @TState) -> Array<u32>;
     fn settled_message_sender(self: @TState) -> Array<ContractAddress>;
 
-    fn get_7383_local_domain(self: @TState) -> u32;
+    fn get_7683_local_domain(self: @TState) -> u32;
 
     fn dispatch_settle(
         ref self: TState,
@@ -61,9 +61,14 @@ pub mod MockHyperlane7683 {
     #[abi(embed_v0)]
     impl DestinationSettlerImpl =
         Base7683Component::DestinationSettlerImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl Base7683Extra = Base7683Component::ERC7683ExtraImpl<ContractState>;
     impl BaseInternalImpl = Base7683Component::InternalImpl<ContractState>;
 
     /// BasicSwap7683
+    #[abi(embed_v0)]
+    impl BasicSwap7683Extra =
+        BasicSwap7683Component::BasicSwapExtraImpl<ContractState>;
     impl BasicSwapInternalImpl = BasicSwap7683Component::InternalImpl<ContractState>;
 
     // Ownable
@@ -427,7 +432,7 @@ pub mod MockHyperlane7683 {
             result
         }
 
-        fn get_7383_local_domain(self: @ContractState) -> u32 {
+        fn get_7683_local_domain(self: @ContractState) -> u32 {
             self.base7683._local_domain()
         }
 

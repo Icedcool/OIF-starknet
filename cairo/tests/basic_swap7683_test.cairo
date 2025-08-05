@@ -5,38 +5,30 @@ use crate::common::{
 };
 use permit2::interfaces::permit2::{IPermit2Dispatcher, IPermit2DispatcherTrait};
 use core::num::traits::{Bounded, Pow};
-use core::keccak::compute_keccak_byte_array;
 use snforge_std::signature::stark_curve::{
     StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl,
 };
 use permit2::snip12_utils::permits::{TokenPermissionsStructHash, U256StructHash};
-use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
+use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl};
 use oif_starknet::libraries::order_encoder::{OrderData, OrderEncoder};
-use oif_starknet::base7683::{
-    SpanFelt252StructHash, ArrayFelt252StructHash, Base7683Component, Base7683Component::Filled,
-    Base7683Component::Settle, Base7683Component::Refund,
-};
+use oif_starknet::base7683::{SpanFelt252StructHash, ArrayFelt252StructHash};
 use oif_starknet::erc7683::interface::{
-    Output, FilledOrder, ResolvedCrossChainOrder, GaslessCrossChainOrder, Open,
-    Base7683ABIDispatcher, Base7683ABIDispatcherTrait,
+    ResolvedCrossChainOrder, GaslessCrossChainOrder, Base7683ABIDispatcher,
+    Base7683ABIDispatcherTrait,
 };
 use oif_starknet::basic_swap7683::BasicSwap7683Component;
 use oif_starknet::libraries::order_encoder::{BytesDefault};
 use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 use starknet::ContractAddress;
 use snforge_std::{
-    start_cheat_caller_address, start_cheat_caller_address_global,
-    start_cheat_block_timestamp_global, stop_cheat_block_timestamp_global, EventSpyAssertionsTrait,
-    stop_cheat_caller_address_global, stop_cheat_caller_address, spy_events, EventSpyTrait,
-    EventsFilterTrait,
+    start_cheat_caller_address, start_cheat_block_timestamp_global, EventSpyAssertionsTrait,
+    stop_cheat_caller_address, spy_events,
 };
-use crate::mocks::mock_base7683::{IMockBase7683Dispatcher, IMockBase7683DispatcherTrait};
 use crate::mocks::mock_basic_swap7683::{
     IMockBasicSwap7683Dispatcher, IMockBasicSwap7683DispatcherTrait,
 };
 use crate::base_test::{
-    BaseTestSetup, setup as base_setup, _prepare_gasless_order as __prepare_gasless_order,
-    _balances, _assert_open_order, _get_signature, _prepare_onchain_order,
+    _prepare_gasless_order as __prepare_gasless_order, _balances, _prepare_onchain_order,
 };
 
 #[derive(Drop, Clone)]
@@ -179,51 +171,6 @@ pub fn setup() -> BasicSwapTestSetup {
         wrong_msg_sender: 'wrongMsgSender'.try_into().unwrap(),
     }
 }
-
-
-// fn setup() -> BasicSwapTestSetup {
-//     let BasicSwapTestSetup {
-//         base_full,
-//         base_swap,
-//         permit2,
-//         input_token,
-//         output_token,
-//         kaka,
-//         karp,
-//         veg,
-//         counterpart,
-//         origin,
-//         destination,
-//         amount,
-//         DOMAIN_SEPARATOR,
-//         fork_id,
-//         mut users,
-//         wrong_msg_origin,
-//         wrong_msg_sender,
-//     } = basic_swap_setup();
-//
-//
-//
-//     BasicSwapTestSetup {
-//         base_full,
-//         base_swap,
-//         permit2,
-//         input_token,
-//         output_token,
-//         kaka,
-//         karp,
-//         veg,
-//         counterpart,
-//         origin,
-//         destination,
-//         amount,
-//         DOMAIN_SEPARATOR,
-//         fork_id,
-//         users,
-//         wrong_msg_origin,
-//         wrong_msg_sender,
-//     }
-// }
 
 fn prepare_order_data(setup: BasicSwapTestSetup) -> OrderData {
     OrderData {

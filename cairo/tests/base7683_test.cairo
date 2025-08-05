@@ -4,27 +4,21 @@ use core::keccak::compute_keccak_byte_array;
 use snforge_std::signature::stark_curve::{
     StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl,
 };
-use crate::common::{pop_event, Account};
+use crate::common::{pop_event};
 use permit2::snip12_utils::permits::{TokenPermissionsStructHash, U256StructHash};
-use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
-use oif_starknet::base7683::{
-    SpanFelt252StructHash, ArrayFelt252StructHash, Base7683Component, Base7683Component::Filled,
-    Base7683Component::Settle, Base7683Component::Refund,
-};
+use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl};
+use oif_starknet::base7683::{SpanFelt252StructHash, ArrayFelt252StructHash, Base7683Component};
 use oif_starknet::erc7683::interface::{
-    Base7683ABIDispatcher, Base7683ABIDispatcherTrait, Output, FilledOrder, GaslessCrossChainOrder,
-    Open,
+    Base7683ABIDispatcherTrait, FilledOrder, GaslessCrossChainOrder, Open,
 };
 use oif_starknet::libraries::order_encoder::{BytesDefault};
-use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-use starknet::ContractAddress;
+use openzeppelin_token::erc20::interface::{IERC20DispatcherTrait};
 use snforge_std::{
-    start_cheat_caller_address, start_cheat_caller_address_global,
-    start_cheat_block_timestamp_global, stop_cheat_block_timestamp_global, EventSpyAssertionsTrait,
-    stop_cheat_caller_address_global, stop_cheat_caller_address, spy_events, EventSpyTrait,
-    EventsFilterTrait,
+    start_cheat_caller_address, start_cheat_block_timestamp_global,
+    stop_cheat_block_timestamp_global, EventSpyAssertionsTrait, stop_cheat_caller_address,
+    spy_events, EventSpyTrait,
 };
-use crate::mocks::mock_base7683::{IMockBase7683Dispatcher, IMockBase7683DispatcherTrait};
+use crate::mocks::mock_base7683::{IMockBase7683DispatcherTrait};
 use crate::base_test::{
     BaseTestSetup, setup as _setup, _prepare_onchain_order, _balances, _assert_open_order,
     _assert_resolved_order, _get_signature,

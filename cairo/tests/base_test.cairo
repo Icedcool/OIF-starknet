@@ -8,17 +8,12 @@ use oif_starknet::erc7683::interface::{
     OnchainCrossChainOrder, ResolvedCrossChainOrder,
 };
 use oif_starknet::libraries::order_encoder::{OpenOrderEncoder};
-use crate::mocks::mock_basic_swap7683::{
-    IMockBasicSwap7683Dispatcher, IMockBasicSwap7683DispatcherTrait,
-};
 use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
-use permit2::interfaces::signature_transfer::{
-    PermitBatchTransferFrom, PermitTransferFrom, TokenPermissions,
-};
+use permit2::interfaces::signature_transfer::{PermitBatchTransferFrom, TokenPermissions};
 use permit2::interfaces::permit2::{IPermit2Dispatcher, IPermit2DispatcherTrait};
 use permit2::snip12_utils::permits::{
-    OffchainMessageHashWitnessTrait, PermitBatchStructHash, PermitBatchTransferFromStructHash,
+    PermitBatchStructHash, PermitBatchTransferFromStructHash,
     PermitBatchTransferFromStructHashWitness, PermitSingleStructHash, PermitTransferFromStructHash,
     PermitTransferFromStructHashWitness, TokenPermissionsStructHash,
 };
@@ -32,10 +27,10 @@ use snforge_std::signature::stark_curve::{
 };
 use starknet::ContractAddress;
 use crate::common::{
-    deploy_mock_basic_swap7683, deploy_eth, deal_multiple, ETH_ADDRESS, Account, deploy_permit2,
-    deploy_erc20, deploy_mock_base7683, generate_account,
+    deploy_eth, deal_multiple, ETH_ADDRESS, Account, deploy_permit2, deploy_erc20,
+    deploy_mock_base7683, generate_account,
 };
-use crate::mocks::mock_base7683::{IMockBase7683Dispatcher, IMockBase7683DispatcherTrait};
+use crate::mocks::mock_base7683::{IMockBase7683Dispatcher};
 
 #[derive(Drop, Clone)]
 pub struct BaseTestSetup {

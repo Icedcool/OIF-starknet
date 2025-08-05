@@ -33,6 +33,8 @@ pub mod Hyperlane7683 {
     #[abi(embed_v0)]
     impl DestinationSettlerImpl =
         Base7683Component::DestinationSettlerImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl Base7683Extra = Base7683Component::ERC7683ExtraImpl<ContractState>;
     impl BaseInternalImpl = Base7683Component::InternalImpl<ContractState>;
 
     /// BasicSwap7683

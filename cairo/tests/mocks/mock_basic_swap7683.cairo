@@ -75,16 +75,13 @@ pub trait IMockBasicSwap7683<TState> {
 
 #[starknet::contract]
 pub mod MockBasicSwap7683 {
-    use oif_starknet::basic_swap7683::BasicSwap7683Component::Virtual;
     use alexandria_bytes::{Bytes, BytesStore};
     use core::keccak::compute_keccak_byte_array;
-    use core::num::traits::Bounded;
     use oif_starknet::base7683::Base7683Component;
     use oif_starknet::base7683::Base7683Component::{DestinationSettler, OriginSettler};
     use oif_starknet::basic_swap7683::BasicSwap7683Component;
     use oif_starknet::erc7683::interface::{
-        IBasicSwapExtra, FillInstruction, GaslessCrossChainOrder, OnchainCrossChainOrder, Output,
-        ResolvedCrossChainOrder,
+        GaslessCrossChainOrder, OnchainCrossChainOrder, ResolvedCrossChainOrder,
     };
     use openzeppelin_utils::cryptography::snip12::StructHashStarknetDomainImpl;
     use starknet::ContractAddress;

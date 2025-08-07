@@ -327,8 +327,8 @@ pub mod BasicSwap7683Component {
                 open_deadline,
                 fill_deadline,
                 order_id,
-                max_spent,
                 min_received,
+                max_spent,
                 fill_instructions,
             };
 
@@ -360,14 +360,14 @@ pub mod BasicSwap7683Component {
         fn _get_gasless_order_id(
             self: @ComponentState<TContractState>, order: @GaslessCrossChainOrder,
         ) -> u256 {
-            compute_keccak_byte_array(@(*order.order_data_type, order.order_data).encode().into())
+            self._get_order_id(*order.order_data_type, order.order_data.clone())
         }
 
         /// Gets the ID of an OnchainCrossChainOrder
         fn _get_onchain_order_id(
             self: @ComponentState<TContractState>, order: @OnchainCrossChainOrder,
         ) -> u256 {
-            compute_keccak_byte_array(@(*order.order_data_type, order.order_data).encode().into())
+            self._get_order_id(*order.order_data_type, order.order_data.clone())
         }
 
 

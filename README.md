@@ -6,16 +6,16 @@ Extension of BootNodeDev's [Open Intent Framework](https://github.com/BootNodeDe
 
 ### Solidity
 
-```
+```bash
 yarn install
 ```
 
-```
+```bash
 yarn test
 ```
 
 ### Cairo
 
-```
+```bash
 scarb test
 ```

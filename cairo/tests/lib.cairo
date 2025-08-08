@@ -16,3 +16,4 @@ pub mod base7683_test;
 pub mod basic_swap7683_test;
 pub mod common;
 pub mod hyperlane7683_test;
+pub mod hyperlane_basic_swap_e2e_test;

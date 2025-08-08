@@ -9,7 +9,7 @@ use permit2::snip12_utils::permits::{TokenPermissionsStructHash, U256StructHash}
 use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl};
 use oif_starknet::base7683::{SpanFelt252StructHash, ArrayFelt252StructHash, Base7683Component};
 use oif_starknet::erc7683::interface::{
-    Base7683ABIDispatcherTrait, FilledOrder, GaslessCrossChainOrder, Open,
+    Base7683ABIDispatcher, Base7683ABIDispatcherTrait, FilledOrder, GaslessCrossChainOrder, Open,
 };
 use oif_starknet::libraries::order_encoder::{BytesDefault};
 use openzeppelin_token::erc20::interface::{IERC20DispatcherTrait};
@@ -20,48 +20,29 @@ use snforge_std::{
 };
 use crate::mocks::mock_base7683::{IMockBase7683DispatcherTrait};
 use crate::base_test::{
-    BaseTestSetup, setup as _setup, _prepare_onchain_order, _balances, _assert_open_order,
+    setup as super_setup, Setup, _prepare_onchain_order, _balances, _assert_open_order,
     _assert_resolved_order, _get_signature,
 };
+use crate::common::{deploy_mock_base7683};
 
-pub fn setup() -> BaseTestSetup {
-    let BaseTestSetup {
-        base_full,
-        base,
-        permit2,
-        input_token,
-        output_token,
-        kaka,
-        karp,
-        veg,
-        counterpart,
-        origin,
-        destination,
-        amount,
-        DOMAIN_SEPARATOR,
-        fork_id,
-        mut users,
-    } = _setup();
+pub fn setup() -> Setup {
+    let mut setup = super_setup();
 
-    users.append(base.contract_address);
+    let base = deploy_mock_base7683(
+        setup.permit2,
+        setup.origin,
+        setup.destination,
+        setup.input_token.contract_address,
+        setup.output_token.contract_address,
+    );
+    let base_full = Base7683ABIDispatcher { contract_address: base.contract_address };
 
-    BaseTestSetup {
-        base_full,
-        base,
-        permit2,
-        input_token,
-        output_token,
-        kaka,
-        karp,
-        veg,
-        counterpart,
-        origin,
-        destination,
-        amount,
-        DOMAIN_SEPARATOR,
-        fork_id,
-        users,
-    }
+    setup.base_full = base_full;
+    setup.base = base;
+
+    setup.users.append(base.contract_address);
+
+    setup
 }
 
 pub fn _prepare_gasless_order(
@@ -70,7 +51,7 @@ pub fn _prepare_gasless_order(
     open_deadline: u64,
     fill_deadline: u64,
     order_data_type: felt252,
-    setup: BaseTestSetup,
+    setup: Setup,
 ) -> GaslessCrossChainOrder {
     GaslessCrossChainOrder {
         origin_settler: setup.base.contract_address,

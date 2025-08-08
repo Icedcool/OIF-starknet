@@ -7,7 +7,6 @@
 #[starknet::component]
 pub mod BasicSwap7683Component {
     use alexandria_bytes::{Bytes, BytesStore};
-    use core::keccak::compute_keccak_byte_array;
     use core::num::traits::{Bounded, Zero};
     use oif_starknet::base7683::Base7683Component;
     use oif_starknet::base7683::Base7683Component::{OPENED, Virtual as BaseVirtual};

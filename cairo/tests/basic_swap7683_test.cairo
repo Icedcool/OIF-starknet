@@ -1,10 +1,6 @@
 use alexandria_bytes::{Bytes, BytesTrait, BytesStore};
-use crate::common::{
-    Account, deal, deal_multiple, deploy_permit2, deploy_eth, deploy_erc20,
-    deploy_mock_basic_swap7683, generate_account,
-};
-use permit2::interfaces::permit2::{IPermit2Dispatcher, IPermit2DispatcherTrait};
-use core::num::traits::{Bounded, Pow};
+use crate::common::{deal, deploy_mock_basic_swap7683};
+use core::num::traits::Bounded;
 use snforge_std::signature::stark_curve::{
     StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl,
 };
@@ -13,85 +9,36 @@ use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl};
 use oif_starknet::libraries::order_encoder::{OrderData, OrderEncoder};
 use oif_starknet::base7683::{SpanFelt252StructHash, ArrayFelt252StructHash};
 use oif_starknet::erc7683::interface::{
-    ResolvedCrossChainOrder, GaslessCrossChainOrder, Base7683ABIDispatcher,
-    Base7683ABIDispatcherTrait,
+    GaslessCrossChainOrder, Base7683ABIDispatcher, Base7683ABIDispatcherTrait,
 };
 use oif_starknet::basic_swap7683::BasicSwap7683Component;
 use oif_starknet::libraries::order_encoder::{BytesDefault};
-use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+use openzeppelin_token::erc20::interface::{IERC20DispatcherTrait};
 use starknet::ContractAddress;
 use snforge_std::{
-    start_cheat_caller_address, start_cheat_block_timestamp_global, EventSpyAssertionsTrait,
-    stop_cheat_caller_address, spy_events,
+    start_cheat_caller_address, EventSpyAssertionsTrait, stop_cheat_caller_address, spy_events,
 };
-use crate::mocks::mock_basic_swap7683::{
-    IMockBasicSwap7683Dispatcher, IMockBasicSwap7683DispatcherTrait,
-};
+use crate::mocks::mock_basic_swap7683::IMockBasicSwap7683DispatcherTrait;
 use crate::base_test::{
+    _assert_resolved_order, Setup, setup as super_setup,
     _prepare_gasless_order as __prepare_gasless_order, _balances, _prepare_onchain_order,
 };
 
-#[derive(Drop, Clone)]
-pub struct BasicSwapTestSetup {
-    pub base_full: Base7683ABIDispatcher,
-    pub base_swap: IMockBasicSwap7683Dispatcher,
-    pub permit2: ContractAddress,
-    pub input_token: IERC20Dispatcher,
-    pub output_token: IERC20Dispatcher,
-    pub kaka: Account,
-    pub karp: Account,
-    pub veg: Account,
-    pub counterpart: ContractAddress,
-    pub origin: u32,
-    pub destination: u32,
-    pub amount: u256,
-    pub DOMAIN_SEPARATOR: felt252,
-    pub fork_id: u256,
-    pub users: Array<ContractAddress>,
-    pub wrong_msg_origin: u32,
-    pub wrong_msg_sender: ContractAddress,
+fn setup() -> Setup {
+    let mut setup = super_setup();
+    let base_swap = deploy_mock_basic_swap7683(setup.permit2);
+    let base_full = Base7683ABIDispatcher { contract_address: base_swap.contract_address };
+
+    setup.base_full = base_full;
+    setup.base_swap = base_swap;
+    setup.wrong_msg_origin = 678.try_into().unwrap();
+    setup.wrong_msg_sender = 'wrongMsgSender'.try_into().unwrap();
+    setup.users.append(base_swap.contract_address);
+
+    setup
 }
 
-pub fn _assert_resolved_order(
-    resolved_order: ResolvedCrossChainOrder,
-    order_data: Bytes,
-    user: ContractAddress,
-    fill_deadline: u64,
-    open_deadline: u64,
-    to: ContractAddress,
-    destination_settler: ContractAddress,
-    origin_chain_id: u32,
-    input_token: ContractAddress,
-    output_token: ContractAddress,
-    setup: BasicSwapTestSetup,
-) {
-    assert_eq!(resolved_order.max_spent.len(), 1);
-    assert_eq!(*resolved_order.max_spent.at(0).token, output_token);
-    assert_eq!(*resolved_order.max_spent.at(0).amount, setup.amount);
-    assert_eq!(*resolved_order.max_spent.at(0).recipient, to);
-    assert_eq!(*resolved_order.max_spent.at(0).chain_id, setup.destination);
-
-    assert_eq!(resolved_order.min_received.len(), 1);
-    assert_eq!(*resolved_order.min_received.at(0).token, input_token);
-    assert_eq!(*resolved_order.min_received.at(0).amount, setup.amount);
-    assert_eq!(*resolved_order.min_received.at(0).recipient, 0.try_into().unwrap());
-    assert_eq!(*resolved_order.min_received.at(0).chain_id, setup.origin);
-
-    assert_eq!(resolved_order.fill_instructions.len(), 1);
-    assert_eq!(*resolved_order.fill_instructions.at(0).destination_chain_id, setup.destination);
-    assert_eq!(*resolved_order.fill_instructions.at(0).destination_settler, destination_settler);
-    assert(
-        resolved_order.fill_instructions.at(0).origin_data == @order_data,
-        'Fill instructions do not match',
-    );
-
-    assert_eq!(resolved_order.user, user);
-    assert_eq!(resolved_order.origin_chain_id, origin_chain_id);
-    assert_eq!(resolved_order.open_deadline, open_deadline);
-    assert_eq!(resolved_order.fill_deadline, fill_deadline);
-}
-
-pub fn _balance_id(user: ContractAddress, setup: BasicSwapTestSetup) -> usize {
+fn _balance_id(user: ContractAddress, setup: Setup) -> usize {
     let kaka = setup.kaka.account.contract_address;
     let karp = setup.karp.account.contract_address;
     let veg = setup.veg.account.contract_address;
@@ -113,66 +60,7 @@ pub fn _balance_id(user: ContractAddress, setup: BasicSwapTestSetup) -> usize {
     }
 }
 
-pub fn setup() -> BasicSwapTestSetup {
-    let permit2 = deploy_permit2();
-    let _eth = deploy_eth();
-    let input_token = deploy_erc20("Input Token", "IN");
-    let output_token = deploy_erc20("Output Token", "OUT");
-    let base_swap = deploy_mock_basic_swap7683(permit2);
-    let base_full = Base7683ABIDispatcher { contract_address: base_swap.contract_address };
-
-    let DOMAIN_SEPARATOR = IPermit2Dispatcher { contract_address: permit2 }.DOMAIN_SEPARATOR();
-    let kaka = generate_account();
-    let karp = generate_account();
-    let veg = generate_account();
-    let counterpart: ContractAddress = 'counterpart'.try_into().unwrap();
-    let users = array![
-        kaka.account.contract_address,
-        karp.account.contract_address,
-        veg.account.contract_address,
-        counterpart,
-        base_swap.contract_address,
-    ];
-
-    deal_multiple(
-        array![
-            input_token.contract_address,
-            output_token.contract_address,
-            _eth.contract_address,
-            _eth.contract_address,
-        ],
-        array![
-            kaka.account.contract_address,
-            karp.account.contract_address,
-            veg.account.contract_address,
-        ],
-        1_000_000 * 10_u256.pow(18),
-    );
-
-    start_cheat_block_timestamp_global(123456789);
-
-    BasicSwapTestSetup {
-        base_full,
-        base_swap,
-        permit2,
-        input_token,
-        output_token,
-        kaka,
-        karp,
-        veg,
-        counterpart,
-        origin: 1,
-        destination: 2,
-        amount: 100,
-        DOMAIN_SEPARATOR,
-        fork_id: 0,
-        users,
-        wrong_msg_origin: 678.try_into().unwrap(),
-        wrong_msg_sender: 'wrongMsgSender'.try_into().unwrap(),
-    }
-}
-
-fn prepare_order_data(setup: BasicSwapTestSetup) -> OrderData {
+fn prepare_order_data(setup: Setup) -> OrderData {
     OrderData {
         sender: setup.kaka.account.contract_address,
         recipient: setup.karp.account.contract_address,
@@ -190,11 +78,7 @@ fn prepare_order_data(setup: BasicSwapTestSetup) -> OrderData {
 }
 
 fn _prepare_gasless_order(
-    setup: BasicSwapTestSetup,
-    order_data: Bytes,
-    permit_nonce: felt252,
-    open_deadline: u64,
-    fill_deadline: u64,
+    setup: Setup, order_data: Bytes, permit_nonce: felt252, open_deadline: u64, fill_deadline: u64,
 ) -> GaslessCrossChainOrder {
     __prepare_gasless_order(
         setup.base_swap.contract_address,

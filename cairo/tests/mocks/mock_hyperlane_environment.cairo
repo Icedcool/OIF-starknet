@@ -20,13 +20,9 @@ pub mod MockHyperlaneEnvironment {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use super::*;
-    use crate::mocks::mock_mailbox::{
-        IMockMailboxDispatcher, IMockMailboxDispatcherTrait
-    };
+    use crate::mocks::mock_mailbox::{IMockMailboxDispatcher, IMockMailboxDispatcherTrait};
     use crate::common::ETH_ADDRESS;
-    use crate::mocks::test_interchain_gas_payment::{
-        ITestInterchainGasPaymentDispatcher,
-    };
+    use crate::mocks::test_interchain_gas_payment::{ITestInterchainGasPaymentDispatcher};
     use crate::mocks::test_ism::{ITestISMDispatcher};
     use starknet::syscalls::{deploy_syscall};
     use starknet::{ClassHash, ContractAddress};

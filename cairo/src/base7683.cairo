@@ -17,8 +17,8 @@ use alexandria_bytes::{Bytes, BytesTrait};
 pub mod Base7683Component {
     use alexandria_bytes::{Bytes, BytesStore};
     use oif_starknet::erc7683::interface::{
-        Output, FilledOrder, GaslessCrossChainOrder, IDestinationSettler, IERC7683Extra,
-        IOriginSettler, OnchainCrossChainOrder, Open, ResolvedCrossChainOrder,
+        FilledOrder, GaslessCrossChainOrder, IDestinationSettler, IERC7683Extra, IOriginSettler,
+        OnchainCrossChainOrder, Open, ResolvedCrossChainOrder,
     };
     use oif_starknet::libraries::order_encoder::OpenOrderEncoder;
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};

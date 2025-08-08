@@ -7,7 +7,7 @@ use oif_starknet::erc7683::interface::{
     Open, Base7683ABIDispatcherTrait, Base7683ABIDispatcher, GaslessCrossChainOrder,
     OnchainCrossChainOrder, ResolvedCrossChainOrder,
 };
-use oif_starknet::libraries::order_encoder::{OpenOrderEncoder};
+use oif_starknet::libraries::order_encoder::{OpenOrderEncoder, ContractAddressDefault};
 use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 use openzeppelin_utils::cryptography::snip12::{SNIP12HashSpanImpl, StructHash};
 use permit2::interfaces::signature_transfer::{PermitBatchTransferFrom, TokenPermissions};
@@ -22,15 +22,60 @@ use permit2::snip12_utils::permits::{
     PermitTransferFromOffChainMessageHashWitness,
 };
 use snforge_std::signature::SignerTrait;
+use snforge_std::start_cheat_block_timestamp_global;
 use snforge_std::signature::stark_curve::{
     StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl,
 };
 use starknet::ContractAddress;
 use crate::common::{
     deploy_eth, deal_multiple, ETH_ADDRESS, Account, deploy_permit2, deploy_erc20,
-    deploy_mock_base7683, generate_account,
+generate_account,
 };
 use crate::mocks::mock_base7683::{IMockBase7683Dispatcher};
+use crate::mocks::mock_basic_swap7683::{IMockBasicSwap7683Dispatcher};
+use crate::mocks::mock_hyperlane7683::{IMockHyperlane7683Dispatcher};
+use mocks::test_interchain_gas_payment::{ITestInterchainGasPaymentDispatcher};
+use crate::mocks::mock_hyperlane_environment::{IMockHyperlaneEnvironmentDispatcher};
+
+#[derive(Drop, Clone)]
+pub struct Setup {
+    pub permit2: ContractAddress,
+    pub input_token: IERC20Dispatcher,
+    pub output_token: IERC20Dispatcher,
+    pub kaka: Account,
+    pub karp: Account,
+    pub veg: Account,
+    pub counterpart: ContractAddress,
+    pub origin: u32,
+    pub destination: u32,
+    pub amount: u256,
+    pub DOMAIN_SEPARATOR: felt252,
+    pub users: Array<ContractAddress>,
+    /// base
+    pub base_full: Base7683ABIDispatcher,
+    pub base: IMockBase7683Dispatcher,
+    /// basic swap
+    pub base_swap: IMockBasicSwap7683Dispatcher,
+    pub wrong_msg_origin: u32,
+    pub wrong_msg_sender: ContractAddress,
+    /// hyperlane
+    pub admin: ContractAddress,
+    pub owner: ContractAddress,
+    pub sender: ContractAddress,
+    pub environment: IMockHyperlaneEnvironmentDispatcher,
+    pub igp: ITestInterchainGasPaymentDispatcher,
+    pub origin_router_b32: u256,
+    pub destination_router_b32: u256,
+    pub destination_router_override_b32: u256,
+    pub gas_payment_quote: u256,
+    pub gas_payment_quote_override: u256,
+    // base
+    pub mock_origin_router: IMockHyperlane7683Dispatcher,
+    pub mock_destination_router: IMockHyperlane7683Dispatcher,
+    // e2e
+    pub origin_router: Base7683ABIDispatcher,
+    pub destination_router: Base7683ABIDispatcher,
+}
 
 #[derive(Drop, Clone)]
 pub struct BaseTestSetup {
@@ -51,17 +96,17 @@ pub struct BaseTestSetup {
     pub users: Array<ContractAddress>,
 }
 
-pub fn setup() -> BaseTestSetup {
+pub fn setup() -> Setup {
+    start_cheat_block_timestamp_global(123456789);
     let permit2 = deploy_permit2();
     let _eth = deploy_eth();
     let input_token = deploy_erc20("Input Token", "IN");
     let output_token = deploy_erc20("Output Token", "OUT");
-    let base = deploy_mock_base7683(
-        permit2, 1, 2, input_token.contract_address, output_token.contract_address,
-    );
-    let base_full = Base7683ABIDispatcher { contract_address: base.contract_address };
-
     let DOMAIN_SEPARATOR = IPermit2Dispatcher { contract_address: permit2 }.DOMAIN_SEPARATOR();
+
+    let admin = 'admin'.try_into().unwrap();
+    let owner = 'owner'.try_into().unwrap();
+    let sender = 'sender'.try_into().unwrap();
     let kaka = generate_account();
     let karp = generate_account();
     let veg = generate_account();
@@ -88,9 +133,10 @@ pub fn setup() -> BaseTestSetup {
         1_000_000 * 10_u256.pow(18),
     );
 
-    BaseTestSetup {
-        base_full,
-        base,
+    let default: ContractAddress = Default::default();
+
+    Setup {
+        // Base
         permit2,
         input_token,
         output_token,
@@ -102,8 +148,29 @@ pub fn setup() -> BaseTestSetup {
         destination: 2,
         amount: 100,
         DOMAIN_SEPARATOR,
-        fork_id: 0,
         users,
+        // BaseTest
+        base_full: Base7683ABIDispatcher { contract_address: default },
+        base: IMockBase7683Dispatcher { contract_address: default },
+        /// BasicSwapTest
+        base_swap: IMockBasicSwap7683Dispatcher { contract_address: default },
+        wrong_msg_origin: Default::default(),
+        wrong_msg_sender: Default::default(),
+        /// HyperlaneTest
+        admin,
+        owner,
+        sender,
+        environment: IMockHyperlaneEnvironmentDispatcher { contract_address: default },
+        igp: ITestInterchainGasPaymentDispatcher { contract_address: default },
+        mock_origin_router: IMockHyperlane7683Dispatcher { contract_address: default },
+        mock_destination_router: IMockHyperlane7683Dispatcher { contract_address: default },
+        origin_router: Base7683ABIDispatcher { contract_address: default },
+        destination_router: Base7683ABIDispatcher { contract_address: default },
+        origin_router_b32: Default::default(),
+        destination_router_b32: Default::default(),
+        destination_router_override_b32: Default::default(),
+        gas_payment_quote: Default::default(),
+        gas_payment_quote_override: Default::default(),
     }
 }
 
@@ -229,7 +296,7 @@ pub fn _get_signature(
     token: ContractAddress,
     nonce: felt252,
     deadline: u64,
-    setup: BaseTestSetup,
+    setup: Setup,
 ) -> Array<felt252> {
     let permit = _default_erc20_permit_multiple(
         array![token], nonce, setup.amount, deadline.into(),
@@ -253,7 +320,7 @@ pub fn _assert_resolved_order(
     origin_chain_id: u32,
     input_token: ContractAddress,
     output_token: ContractAddress,
-    setup: BaseTestSetup,
+    setup: Setup,
 ) {
     assert_eq!(resolved_order.max_spent.len(), 1);
     assert_eq!(*resolved_order.max_spent.at(0).token, output_token);
@@ -282,7 +349,7 @@ pub fn _assert_resolved_order(
 }
 
 
-pub fn _order_data_by_id(order_id: u256, setup: BaseTestSetup) -> Bytes {
+pub fn _order_data_by_id(order_id: u256, setup: Setup) -> Bytes {
     let (_, order_data): (felt252, @Bytes) = setup.base_full.open_orders(order_id).decode();
 
     order_data.clone()
@@ -294,7 +361,7 @@ pub fn _assert_open_order(
     order_data: Bytes,
     balances_before: Array<u256>,
     user: ContractAddress,
-    setup: BaseTestSetup,
+    setup: Setup,
 ) {
     _assert_open_order_native_option(
         order_id, sender, order_data, balances_before, user, false, setup,
@@ -308,7 +375,7 @@ pub fn _assert_open_order_native_option(
     balances_before: Array<u256>,
     user: ContractAddress,
     native: bool,
-    setup: BaseTestSetup,
+    setup: Setup,
 ) {
     let saved_order_data = _order_data_by_id(order_id, setup.clone());
 
@@ -327,7 +394,7 @@ pub fn _assert_open_order_native_option(
     );
 }
 
-pub fn _balance_id(user: ContractAddress, setup: BaseTestSetup) -> usize {
+pub fn _balance_id(user: ContractAddress, setup: Setup) -> usize {
     let kaka = setup.kaka.account.contract_address;
     let karp = setup.karp.account.contract_address;
     let veg = setup.veg.account.contract_address;
@@ -359,7 +426,7 @@ pub fn _assert_order(
     to: ContractAddress,
     expected_status: felt252,
     native: bool,
-    setup: BaseTestSetup,
+    setup: Setup,
 ) {
     let saved_order_data = _order_data_by_id(order_id, setup.clone());
     let status = setup.base_full.order_status(order_id);

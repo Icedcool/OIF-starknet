@@ -34,23 +34,17 @@ func (v *Hyperlane7683Verifier) GetPreDeployedAddress() common.Address {
 // VerifyContractExists checks if the pre-deployed contract exists and is accessible
 func (v *Hyperlane7683Verifier) VerifyContractExists() error {
 	address := v.GetPreDeployedAddress()
-	
+
 	// Check if the contract exists by getting its code
 	code, err := v.client.CodeAt(v.auth.Context, address, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get contract code: %w", err)
 	}
-	
+
 	if len(code) == 0 {
 		return fmt.Errorf("no contract found at address %s", address.Hex())
 	}
-	
+
 	log.Printf("✅ Verified pre-deployed Hyperlane7683 contract at %s", address.Hex())
 	return nil
-}
-
-// GetMailboxAddress returns the mainnet Hyperlane mailbox address
-// Note: This might not be needed since we're using pre-deployed contracts
-func (v *Hyperlane7683Verifier) GetMailboxAddress() common.Address {
-	return common.HexToAddress("0x35231d4c360Df9C1Dcaa8D01e65151A91aA4e3E63")
 }

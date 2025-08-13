@@ -4,7 +4,7 @@
 
 ### **🏗️ Environment Setup**
 
-- [x] **Network management** - Start/stop networks with color-coded logs
+- [x] **Network management** - Start/stop networks with logs
   - Runs local forks of eth sepolia, optimism seplia, arbitrum seplia, and base sepolia
 
 ### **🔍 Tools**
@@ -17,18 +17,21 @@
   - `make deploy-tokens` to deploy erc20 tokens, fund accounts, and setup allowances
   - `make open-basic-order` to open a simple onchain order
   - `make open-random-order` to open a random onchain order (random origin, destination, in/out amounts, etc.)
+  - `make run` to run the solver as is
+    - Currently listens to Open events and logs them (back fill if solver is behind on events is implemented)
+
+### **🏁 Milestones**
+
+- [x] **Fetch Open events**: The solver successfully listens for and fetches Open events
 
 ## 🚧 **IN PROGRESS - NEXT PRIORITY**
 
-### **📋 Order Opening (Current Focus)**
-
-- [ ] **Replace mock events** with real Hyperlane7683 event subscriptions for `Open` events
+- [ ] **Intent validation** - Ensure fill is plausible, i.e, token balances, order status, deadlines, etc.
 
 ## 📋 **TODO - Next Focus**
 
-- [ ] **Real intent validation** - Check token balances, amounts, etc.
-- [ ] **Rule evaluation** - Apply business logic to real orders
-- [ ] **Transaction execution** - Build and send fill transactions
+- [ ] **Fill execution** - Build and send fill transactions
+- [ ] **Order settlement?** - Handle order settlement (on origin chain) if necessary. Research hyperlane's dispatch settle
 
 ## 📋 **TODO - Future/Parallel Focus**
 

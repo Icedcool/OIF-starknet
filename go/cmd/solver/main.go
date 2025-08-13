@@ -10,6 +10,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Custom formatter that outputs only the message
+type cleanFormatter struct{}
+
+func (f *cleanFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	return append([]byte(entry.Message), '\n'), nil
+}
+
 func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -61,9 +68,8 @@ func setupLogger(cfg *config.Config) *logrus.Logger {
 	if cfg.LogFormat == "json" {
 		logger.SetFormatter(&logrus.JSONFormatter{})
 	} else {
-		logger.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp: true,
-		})
+		// Custom formatter that outputs only the message text
+		logger.SetFormatter(&cleanFormatter{})
 	}
 
 	return logger

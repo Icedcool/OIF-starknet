@@ -123,3 +123,5 @@ Starting multi-network event listener...
 ```
 
 Once the solver is running, it will first catch up on any missed Open events from the last indexed block to the latest block (for each network). Once historical events have been processed, the solver will start listening for new events on a schedule and process them. Note, for now, Open events are logged, the rest of the intent → fill pipeline is not yet implemented.
+
+If the solver is stopped and restarted, it will automatically pickup where it left off and continue processing events from the last indexed block. The last indexed block is only reset when the networks are restarted (not the solver). When the networks are started/restarted, the last indexed block for each network is set to the block that the fork was started at.

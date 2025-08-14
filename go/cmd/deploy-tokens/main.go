@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
+	"github.com/NethermindEth/oif-starknet/go/pkg/ethutil"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -57,27 +58,23 @@ func main() {
 	}
 
 	// Parse deployer private key
-	deployerKeyHex = strings.TrimPrefix(deployerKeyHex, "0x")
-	deployerKey, err := crypto.HexToECDSA(deployerKeyHex)
+	deployerKey, err := ethutil.ParsePrivateKey(deployerKeyHex)
 	if err != nil {
 		log.Fatalf("Failed to parse deployer private key: %v", err)
 	}
 
 	// Parse test user private keys
-	aliceKeyHex = strings.TrimPrefix(aliceKeyHex, "0x")
-	aliceKey, err := crypto.HexToECDSA(aliceKeyHex)
+	aliceKey, err := ethutil.ParsePrivateKey(aliceKeyHex)
 	if err != nil {
 		log.Fatalf("Failed to parse Alice private key: %v", err)
 	}
 
-	bobKeyHex = strings.TrimPrefix(bobKeyHex, "0x")
-	bobKey, err := crypto.HexToECDSA(bobKeyHex)
+	bobKey, err := ethutil.ParsePrivateKey(bobKeyHex)
 	if err != nil {
 		log.Fatalf("Failed to parse Bob private key: %v", err)
 	}
 
-	charlieKeyHex = strings.TrimPrefix(charlieKeyHex, "0x")
-	charlieKey, err := crypto.HexToECDSA(charlieKeyHex)
+	charlieKey, err := ethutil.ParsePrivateKey(charlieKeyHex)
 	if err != nil {
 		log.Fatalf("Failed to parse Charlie private key: %v", err)
 	}
@@ -166,13 +163,13 @@ func deployERC20(client *ethclient.Client, privateKey *ecdsa.PrivateKey, symbol,
 	}
 
 	// Create auth for transaction signing
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+	auth, err := ethutil.NewTransactor(chainID, privateKey)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("failed to create auth: %w", err)
 	}
 
 	// Get current gas price from network
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	gasPrice, err := ethutil.SuggestGas(client)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("failed to get gas price: %w", err)
 	}
@@ -260,7 +257,7 @@ func fundUsers(client *ethclient.Client, deployerKey, aliceKey, bobKey, charlieK
 	}
 
 	// Create deployer auth for minting
-	deployerAuth, err := bind.NewKeyedTransactorWithChainID(deployerKey, chainID)
+	deployerAuth, err := ethutil.NewTransactor(chainID, deployerKey)
 	if err != nil {
 		return fmt.Errorf("failed to create deployer auth: %w", err)
 	}
@@ -305,7 +302,7 @@ func transferTokens(client *ethclient.Client, auth *bind.TransactOpts, tokenAddr
 		return fmt.Errorf("failed to get chain ID: %w", err)
 	}
 
-	userAuth, err := bind.NewKeyedTransactorWithChainID(userKey, chainID)
+	userAuth, err := ethutil.NewTransactor(chainID, userKey)
 	if err != nil {
 		return fmt.Errorf("failed to create user auth: %w", err)
 	}
@@ -317,7 +314,7 @@ func transferTokens(client *ethclient.Client, auth *bind.TransactOpts, tokenAddr
 	}
 
 	// Get current gas price from network
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	gasPrice, err := ethutil.SuggestGas(client)
 	if err != nil {
 		return fmt.Errorf("failed to get gas price: %w", err)
 	}
@@ -398,13 +395,13 @@ func setAllowances(client *ethclient.Client, aliceKey, bobKey, charlieKey *ecdsa
 		fmt.Printf("     🔓 Setting %s allowances...\n", user.name)
 
 		// Create user auth
-		userAuth, err := bind.NewKeyedTransactorWithChainID(user.key, chainID)
+		userAuth, err := ethutil.NewTransactor(chainID, user.key)
 		if err != nil {
 			return fmt.Errorf("failed to create auth for %s: %w", user.name, err)
 		}
 
 		// Get current gas price
-		gasPrice, err := client.SuggestGasPrice(context.Background())
+		gasPrice, err := ethutil.SuggestGas(client)
 		if err != nil {
 			return fmt.Errorf("failed to get gas price for %s: %w", user.name, err)
 		}
@@ -486,14 +483,6 @@ func approveUnlimited(client *ethclient.Client, auth *bind.TransactOpts, tokenAd
 
 // verifyBalancesAndAllowances verifies that users have the expected balances and allowances
 func verifyBalancesAndAllowances(client *ethclient.Client, aliceKey, bobKey, charlieKey *ecdsa.PrivateKey, orcaCoinAddress, dogCoinAddress common.Address, networkName string) error {
-	// Get the ERC20 contract configuration
-	contract := deployer.GetERC20Contract()
-
-	// Parse the ABI
-	parsedABI, err := abi.JSON(strings.NewReader(contract.ABI))
-	if err != nil {
-		return fmt.Errorf("failed to parse ABI: %w", err)
-	}
 
 	// Expected balance after funding
 	expectedBalance := new(big.Int).Mul(big.NewInt(100000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)) // 100,000 tokens
@@ -516,7 +505,8 @@ func verifyBalancesAndAllowances(client *ethclient.Client, aliceKey, bobKey, cha
 		fmt.Printf("     🔍 Verifying %s...\n", user.name)
 
 		// Check OrcaCoin balance
-		orcaBalance, err := getTokenBalance(client, orcaCoinAddress, user.key, parsedABI)
+		userAddr := crypto.PubkeyToAddress(user.key.PublicKey)
+		orcaBalance, err := ethutil.ERC20Balance(client, orcaCoinAddress, userAddr)
 		if err != nil {
 			return fmt.Errorf("failed to get %s's OrcaCoin balance: %w", user.name, err)
 		}
@@ -527,7 +517,7 @@ func verifyBalancesAndAllowances(client *ethclient.Client, aliceKey, bobKey, cha
 		fmt.Printf("       ✅ OrcaCoin: %s tokens\n", new(big.Float).Quo(new(big.Float).SetInt(orcaBalance), new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))).Text('f', 0))
 
 		// Check DogCoin balance
-		dogBalance, err := getTokenBalance(client, dogCoinAddress, user.key, parsedABI)
+		dogBalance, err := ethutil.ERC20Balance(client, dogCoinAddress, userAddr)
 		if err != nil {
 			return fmt.Errorf("failed to get %s's DogCoin balance: %w", user.name, err)
 		}
@@ -537,7 +527,7 @@ func verifyBalancesAndAllowances(client *ethclient.Client, aliceKey, bobKey, cha
 		fmt.Printf("       ✅ DogCoin: %s tokens\n", new(big.Float).Quo(new(big.Float).SetInt(dogBalance), new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))).Text('f', 0))
 
 		// Check OrcaCoin allowance
-		orcaAllowance, err := getTokenAllowance(client, orcaCoinAddress, user.key, hyperlaneAddress, parsedABI)
+		orcaAllowance, err := ethutil.ERC20Allowance(client, orcaCoinAddress, userAddr, hyperlaneAddress)
 		if err != nil {
 			return fmt.Errorf("failed to get %s's OrcaCoin allowance: %w", user.name, err)
 		}
@@ -548,7 +538,7 @@ func verifyBalancesAndAllowances(client *ethclient.Client, aliceKey, bobKey, cha
 		fmt.Printf("       ✅ OrcaCoin allowance: Unlimited\n")
 
 		// Check DogCoin allowance
-		dogAllowance, err := getTokenAllowance(client, dogCoinAddress, user.key, hyperlaneAddress, parsedABI)
+		dogAllowance, err := ethutil.ERC20Allowance(client, dogCoinAddress, userAddr, hyperlaneAddress)
 		if err != nil {
 			return fmt.Errorf("failed to get %s's DogCoin allowance: %w", user.name, err)
 		}
@@ -561,72 +551,4 @@ func verifyBalancesAndAllowances(client *ethclient.Client, aliceKey, bobKey, cha
 	return nil
 }
 
-// getTokenBalance gets the token balance for a user
-func getTokenBalance(client *ethclient.Client, tokenAddress common.Address, userKey *ecdsa.PrivateKey, parsedABI abi.ABI) (*big.Int, error) {
-	// Get user address
-	chainID, err := client.ChainID(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get chain ID: %w", err)
-	}
 
-	userAuth, err := bind.NewKeyedTransactorWithChainID(userKey, chainID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create user auth: %w", err)
-	}
-
-	// Encode balanceOf function call
-	data, err := parsedABI.Pack("balanceOf", userAuth.From)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode balanceOf call: %w", err)
-	}
-
-	// Call contract
-	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
-		From: userAuth.From,
-		To:   &tokenAddress,
-		Data: data,
-	}, nil)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to call balanceOf: %w", err)
-	}
-
-	// Decode result
-	balance := new(big.Int).SetBytes(result)
-	return balance, nil
-}
-
-// getTokenAllowance gets the token allowance for a user to a spender
-func getTokenAllowance(client *ethclient.Client, tokenAddress common.Address, userKey *ecdsa.PrivateKey, spenderAddress common.Address, parsedABI abi.ABI) (*big.Int, error) {
-	// Get user address
-	chainID, err := client.ChainID(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get chain ID: %w", err)
-	}
-
-	userAuth, err := bind.NewKeyedTransactorWithChainID(userKey, chainID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create user auth: %w", err)
-	}
-
-	// Encode allowance function call
-	data, err := parsedABI.Pack("allowance", userAuth.From, spenderAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode allowance call: %w", err)
-	}
-
-	// Call contract
-	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
-		From: userAuth.From,
-		To:   &tokenAddress,
-		Data: data,
-	}, nil)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get allowance: %w", err)
-	}
-
-	// Decode result
-	allowance := new(big.Int).SetBytes(result)
-	return allowance, nil
-}

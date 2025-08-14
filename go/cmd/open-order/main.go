@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
+	"github.com/NethermindEth/oif-starknet/go/pkg/ethutil"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -264,20 +265,19 @@ func executeOrder(order OrderConfig) {
 	}
 
 	// Parse private key
-	userKey = strings.TrimPrefix(userKey, "0x")
-	privateKey, err := crypto.HexToECDSA(userKey)
+	privateKey, err := ethutil.ParsePrivateKey(userKey)
 	if err != nil {
 		log.Fatalf("Failed to parse private key for %s: %v", order.User, err)
 	}
 
 	// Create auth
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(int64(originNetwork.chainID)))
+	auth, err := ethutil.NewTransactor(big.NewInt(int64(originNetwork.chainID)), privateKey)
 	if err != nil {
 		log.Fatalf("Failed to create auth: %v", err)
 	}
 
 	// Get current gas price
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	gasPrice, err := ethutil.SuggestGas(client)
 	if err != nil {
 		log.Fatalf("Failed to get gas price: %v", err)
 	}
@@ -313,21 +313,21 @@ func executeOrder(order OrderConfig) {
 	spender := originNetwork.hyperlaneAddress
 
 	// Get initial balances
-	initialUserBalance, err := getErc20Balance(client, inputToken, owner)
+	initialUserBalance, err := ethutil.ERC20Balance(client, inputToken, owner)
 	if err == nil {
 		fmt.Printf("   🔍 Initial InputToken balance(owner): %s\n", initialUserBalance.String())
 	} else {
 		fmt.Printf("   ⚠️  Could not read initial balance: %v\n", err)
 	}
 
-	initialHyperlaneBalance, err := getErc20Balance(client, inputToken, spender)
+	initialHyperlaneBalance, err := ethutil.ERC20Balance(client, inputToken, spender)
 	if err == nil {
 		fmt.Printf("   🔍 Initial InputToken balance(hyperlane): %s\n", initialHyperlaneBalance.String())
 	} else {
 		fmt.Printf("   ⚠️  Could not read initial hyperlane balance: %v\n", err)
 	}
 
-	allowance, err := getErc20Allowance(client, inputToken, owner, spender)
+	allowance, err := ethutil.ERC20Allowance(client, inputToken, owner, spender)
 	if err == nil {
 		fmt.Printf("   🔍 InputToken allowance(owner→settler): %s\n", allowance.String())
 	} else {
@@ -397,7 +397,7 @@ func executeOrder(order OrderConfig) {
 	fmt.Printf("   ⏳ Waiting for confirmation...\n")
 
 	// Wait for transaction confirmation
-	receipt, err := bind.WaitMined(context.Background(), client, tx)
+	receipt, err := ethutil.WaitForTransaction(client, tx)
 	if err != nil {
 		log.Fatalf("Failed to wait for transaction confirmation: %v", err)
 	}
@@ -438,50 +438,7 @@ func executeOrder(order OrderConfig) {
 	fmt.Printf("\n🎉 Order execution completed!\n")
 }
 
-// Minimal ERC20 helpers
-func getErc20Balance(client *ethclient.Client, token common.Address, owner common.Address) (*big.Int, error) {
-	abiStr := `[{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]`
-	p, err := abi.JSON(strings.NewReader(abiStr))
-	if err != nil {
-		return nil, err
-	}
-	data, err := p.Pack("balanceOf", owner)
-	if err != nil {
-		return nil, err
-	}
-	msg := ethereum.CallMsg{To: &token, Data: data}
-	res, err := client.CallContract(context.Background(), msg, nil)
-	if err != nil {
-		return nil, err
-	}
-	var out *big.Int
-	if err := p.UnpackIntoInterface(&out, "balanceOf", res); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
 
-func getErc20Allowance(client *ethclient.Client, token common.Address, owner, spender common.Address) (*big.Int, error) {
-	abiStr := `[{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]`
-	p, err := abi.JSON(strings.NewReader(abiStr))
-	if err != nil {
-		return nil, err
-	}
-	data, err := p.Pack("allowance", owner, spender)
-	if err != nil {
-		return nil, err
-	}
-	msg := ethereum.CallMsg{To: &token, Data: data}
-	res, err := client.CallContract(context.Background(), msg, nil)
-	if err != nil {
-		return nil, err
-	}
-	var out *big.Int
-	if err := p.UnpackIntoInterface(&out, "allowance", res); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
 
 // simulateAndDecodeRevert runs an eth_call with the same calldata and decodes common custom errors
 func simulateAndDecodeRevert(client *ethclient.Client, to, from common.Address, data []byte) error {
@@ -834,12 +791,12 @@ func verifyBalanceChanges(client *ethclient.Client, tokenAddress, userAddress, h
 	time.Sleep(2 * time.Second)
 
 	// Get final balances
-	finalUserBalance, err := getErc20Balance(client, tokenAddress, userAddress)
+	finalUserBalance, err := ethutil.ERC20Balance(client, tokenAddress, userAddress)
 	if err != nil {
 		return fmt.Errorf("failed to get final user balance: %w", err)
 	}
 
-	finalHyperlaneBalance, err := getErc20Balance(client, tokenAddress, hyperlaneAddress)
+	finalHyperlaneBalance, err := ethutil.ERC20Balance(client, tokenAddress, hyperlaneAddress)
 	if err != nil {
 		return fmt.Errorf("failed to get final hyperlane balance: %w", err)
 	}
@@ -850,48 +807,36 @@ func verifyBalanceChanges(client *ethclient.Client, tokenAddress, userAddress, h
 
 	// Print balance changes
 	fmt.Printf("     💰 User balance change: %s → %s (Δ: %s)\n",
-		formatTokenAmount(initialBalances.userBalance),
-		formatTokenAmount(finalUserBalance),
-		formatTokenAmount(userBalanceChange))
+		ethutil.FormatTokenAmount(initialBalances.userBalance, 18),
+		ethutil.FormatTokenAmount(finalUserBalance, 18),
+		ethutil.FormatTokenAmount(userBalanceChange, 18))
 
 	fmt.Printf("     💰 Hyperlane balance change: %s → %s (Δ: %s)\n",
-		formatTokenAmount(initialBalances.hyperlaneBalance),
-		formatTokenAmount(finalHyperlaneBalance),
-		formatTokenAmount(hyperlaneBalanceChange))
+		ethutil.FormatTokenAmount(initialBalances.hyperlaneBalance, 18),
+		ethutil.FormatTokenAmount(finalHyperlaneBalance, 18),
+		ethutil.FormatTokenAmount(hyperlaneBalanceChange, 18))
 
 	// Verify the changes match expectations
 	if userBalanceChange.Cmp(expectedTransferAmount) != 0 {
 		return fmt.Errorf("user balance decreased by %s, expected %s",
-			formatTokenAmount(userBalanceChange),
-			formatTokenAmount(expectedTransferAmount))
+			ethutil.FormatTokenAmount(userBalanceChange, 18),
+			ethutil.FormatTokenAmount(expectedTransferAmount, 18))
 	}
 
 	if hyperlaneBalanceChange.Cmp(expectedTransferAmount) != 0 {
 		return fmt.Errorf("hyperlane balance increased by %s, expected %s",
-			formatTokenAmount(hyperlaneBalanceChange),
-			formatTokenAmount(expectedTransferAmount))
+			ethutil.FormatTokenAmount(hyperlaneBalanceChange, 18),
+			ethutil.FormatTokenAmount(expectedTransferAmount, 18))
 	}
 
 	// Verify total supply is preserved (user decrease = hyperlane increase)
 	if userBalanceChange.Cmp(hyperlaneBalanceChange) != 0 {
 		return fmt.Errorf("balance changes don't match: user decreased by %s, hyperlane increased by %s",
-			formatTokenAmount(userBalanceChange),
-			formatTokenAmount(hyperlaneBalanceChange))
+			ethutil.FormatTokenAmount(userBalanceChange, 18),
+			ethutil.FormatTokenAmount(hyperlaneBalanceChange, 18))
 	}
 
 	return nil
 }
 
-// formatTokenAmount formats a token amount for display (converts from wei to tokens)
-func formatTokenAmount(amount *big.Int) string {
-	if amount == nil {
-		return "0"
-	}
 
-	// Convert from wei (18 decimals) to tokens
-	tokenAmount := new(big.Float).Quo(
-		new(big.Float).SetInt(amount),
-		new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)))
-
-	return tokenAmount.Text('f', 2) + " tokens"
-}

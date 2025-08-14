@@ -202,10 +202,14 @@ func (sm *SolverManager) startSolver(solver *SolverModule) error {
 			return err
 		}
 
-		// Update the deployment state with the last indexed block
-		if err := deployer.UpdateLastIndexedBlock(originChainName, blockNumber); err != nil {
-			sm.logger.Warnf("Failed to update last indexed block for %s: %v", originChainName, err)
-		}
+		// TODO: Don't update LastIndexedBlock here - we only update after fully processing all events in a block
+		// This ensures we don't skip blocks with unprocessed events
+		// LastIndexedBlock will be updated by the listener when MarkBlockFullyProcessed is called
+		// 
+		// The flow should be:
+		// 1. Event detected → ProcessIntent called → Event processed/filled
+		// 2. After ALL events in a block are processed → MarkBlockFullyProcessed called
+		// 3. Only then is LastIndexedBlock updated
 
 		sm.logger.WithFields(logrus.Fields{
 			"solver":  solver.Name,
@@ -254,4 +258,25 @@ func (sm *SolverManager) GetSolver(name string) (*SolverModule, bool) {
 // GetSolvers returns all solvers
 func (sm *SolverManager) GetSolvers() map[string]*SolverModule {
 	return sm.solvers
+}
+
+// MarkBlockFullyProcessed marks a block as fully processed across all solvers
+// This should be called after all events in a block have been processed/filled
+func (sm *SolverManager) MarkBlockFullyProcessed(chainName string, blockNumber uint64) error {
+	sm.logger.WithFields(logrus.Fields{
+		"chainName":  chainName,
+		"blockNumber": blockNumber,
+	}).Info("Marking block as fully processed")
+	
+	// Update the deployment state with the last indexed block
+	if err := deployer.UpdateLastIndexedBlock(chainName, blockNumber); err != nil {
+		return fmt.Errorf("failed to update last indexed block for %s: %w", chainName, err)
+	}
+	
+	sm.logger.WithFields(logrus.Fields{
+		"chainName":  chainName,
+		"blockNumber": blockNumber,
+	}).Info("Block marked as fully processed and LastIndexedBlock updated")
+	
+	return nil
 }

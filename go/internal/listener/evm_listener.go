@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -37,9 +36,19 @@ func NewEVMListener(config *ListenerConfig, rpcURL string, logger *logrus.Logger
 		return nil, fmt.Errorf("failed to dial RPC: %w", err)
 	}
 
-	// Initialize lastProcessedBlock to InitialBlock - 1 to ensure we process from InitialBlock
-	initialBlock := config.InitialBlock.Uint64()
-	lastProcessedBlock := initialBlock - 1
+	// Initialize lastProcessedBlock safely, handling nil/zero InitialBlock
+	var lastProcessedBlock uint64
+	if config.InitialBlock == nil || config.InitialBlock.Sign() <= 0 {
+		// If no initial block specified, start from current block
+		currentBlock, err := client.BlockNumber(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current block number: %w", err)
+		}
+		lastProcessedBlock = currentBlock
+	} else {
+		// Start from specified initial block - 1 to ensure we process from InitialBlock
+		lastProcessedBlock = config.InitialBlock.Uint64() - 1
+	}
 
 	return &EVMListener{
 		config:             config,
@@ -76,6 +85,25 @@ func (l *EVMListener) Stop() error {
 // GetLastProcessedBlock returns the last processed block number
 func (l *EVMListener) GetLastProcessedBlock() uint64 {
 	return l.lastProcessedBlock
+}
+
+// MarkBlockFullyProcessed marks a block as fully processed and updates LastIndexedBlock
+// This should be called after all events in a block have been processed/filled
+func (l *EVMListener) MarkBlockFullyProcessed(blockNumber uint64) error {
+	// Only update if this is the next block in sequence
+	if blockNumber != l.lastProcessedBlock+1 {
+		return fmt.Errorf("cannot mark block %d as processed, expected %d", blockNumber, l.lastProcessedBlock+1)
+	}
+	
+	// Update the last processed block
+	l.lastProcessedBlock = blockNumber
+	
+	// TODO: This method should be called by the solver manager after all events in a block are processed
+	// The solver manager will handle updating LastIndexedBlock via deployer.UpdateLastIndexedBlock
+	// This ensures proper coordination between event processing and block indexing
+	
+	l.logger.Infof("✅ Block %d marked as fully processed for %s", blockNumber, l.config.ChainName)
+	return nil
 }
 
 // realEventLoop implements simple polling for local forks (which don't support eth_subscribe)
@@ -124,17 +152,14 @@ func (l *EVMListener) processCurrentBlockRange(ctx context.Context, handler Even
 		return fmt.Errorf("failed to process blocks %d-%d: %v", fromBlock, toBlock, err)
 	}
 
-	// Update the last processed block
-	//oldLastProcessed := l.lastProcessedBlock
+	// Update the last processed block (but don't persist to deployment state yet)
+	// TODO: We only persist after all events in the block have been fully processed/filled
+	// This means:
+	// 1. Process all events in the block
+	// 2. For each event: check if already filled, if not then fill it
+	// 3. Only after ALL events in the block are processed/filled, update LastIndexedBlock
+	// 4. This ensures we never skip a block with unprocessed events
 	l.lastProcessedBlock = toBlock
-
-	// Persist the updated lastProcessedBlock to deployment state
-	if err := deployer.UpdateLastIndexedBlock(l.config.ChainName, toBlock); err != nil {
-		l.logger.Warnf("⚠️  Failed to persist lastProcessedBlock (%s): %v", l.config.ChainName, err)
-	}
-	//else {
-	//	l.logger.Debugf("💾 Persisted lastProcessedBlock %d to deployment state", toBlock)
-	//}
 
 	return nil
 }
@@ -231,13 +256,17 @@ func (l *EVMListener) catchUpHistoricalBlocks(ctx context.Context, handler Event
 		return fmt.Errorf("failed to get current block number: %v", err)
 	}
 
-	// Process from initial block to current block
-	fromBlock := l.config.InitialBlock.Uint64()
+	// Process from initial block to current block, handling nil/zero InitialBlock
+	var fromBlock uint64
+	if l.config.InitialBlock == nil || l.config.InitialBlock.Sign() <= 0 {
+		// If no initial block specified, start from current block (no historical processing needed)
+		fromBlock = currentBlock
+	} else {
+		fromBlock = l.config.InitialBlock.Uint64()
+	}
 	toBlock := currentBlock
 
-	//l.logger.Infof("🔧 Backfill (%s): InitialBlock=%d, CurrentBlock=%d, LastProcessedBlock=%d", l.config.ChainName, fromBlock, toBlock, l.lastProcessedBlock)
-
-	if fromBlock > toBlock {
+	if fromBlock >= toBlock {
 		l.logger.Info("✅ Already up to date, no historical blocks to process")
 		return nil
 	}
@@ -248,11 +277,8 @@ func (l *EVMListener) catchUpHistoricalBlocks(ctx context.Context, handler Event
 		l.lastProcessedBlock = fromBlock - 1
 	}
 
-	//l.logger.Infof("Processing historical blocks: %d-%d", fromBlock, toBlock)
-
 	// Process in chunks to avoid overwhelming the node
 	chunkSize := l.config.MaxBlockRange
-	//l.logger.Debugf("🔧 Backfill chunk size: %d", chunkSize)
 
 	for start := fromBlock; start < toBlock; start += chunkSize {
 		end := start + chunkSize
@@ -260,28 +286,13 @@ func (l *EVMListener) catchUpHistoricalBlocks(ctx context.Context, handler Event
 			end = toBlock
 		}
 
-		//l.logger.Debugf("📦 Processing backfill chunk: %d-%d", start, end)
-
 		if err := l.processBlockRange(ctx, start, end, handler); err != nil {
 			return fmt.Errorf("failed to process historical blocks %d-%d: %v", start, end, err)
 		}
-
-		//l.logger.Debugf("✅ Completed backfill chunk: %d-%d", start, end)
-
-		// Don't update lastProcessedBlock here - wait until the end
 	}
 
 	// Update last processed block only after ALL historical blocks are processed
-	//oldLastProcessed := l.lastProcessedBlock
 	l.lastProcessedBlock = toBlock
-	//l.logger.Infof("💾 Backfill complete: updated lastProcessedBlock for %s", l.config.ChainName)
-
-	// Persist the updated lastProcessedBlock to deployment state
-	if err := deployer.UpdateLastIndexedBlock(l.config.ChainName, toBlock); err != nil {
-		l.logger.Warnf("⚠️  Failed to persist lastProcessedBlock after backfill (%s): %v", l.config.ChainName, err)
-	} else {
-		l.logger.Infof("💾 Backfill complete (%s): persisted lastProcessedBlock", l.config.ChainName)
-	}
 
 	l.logger.Infof("✅ Historical block processing completed for %s", l.config.ChainName)
 	return nil
@@ -305,8 +316,8 @@ func (l *EVMListener) startPolling(ctx context.Context, handler EventHandler) {
 				l.logger.Errorf("❌ Failed to process current block range: %v", err)
 			}
 
-			// Wait for next poll interval (5 seconds)
-			time.Sleep(5 * time.Second)
+			// Wait for next poll interval using configured value
+			time.Sleep(time.Duration(l.config.PollInterval) * time.Millisecond)
 		}
 	}
 }

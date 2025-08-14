@@ -538,7 +538,7 @@ func buildOrderData(order OrderConfig, originNetwork *NetworkConfig, destination
 
 	return OrderData{
 		Sender:             userBytes,
-		Recipient:          recipientBytes,
+		Recipient:          userBytes,
 		InputToken:         inputTokenBytes,
 		OutputToken:        outputTokenBytes,
 		AmountIn:           order.InputAmount,

@@ -3,34 +3,34 @@
     "Arbitrum Sepolia": {
       "chainId": 421614,
       "hyperlaneAddress": "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
-      "orcaCoinAddress": "0xfcF38f326CA709b0B04B2215Dbc969fC622775F7",
-      "dogCoinAddress": "0x11c81c1A7979cdd309096D1ea53F887EA9f8D14d",
-      "lastIndexedBlock": 138020020,
-      "lastUpdated": "2025-08-14T03:55:58-04:00"
+      "orcaCoinAddress": "0xE75e556d685D7428C8242eaF331A5eF80FCACa1f",
+      "dogCoinAddress": "0x186758879f2609536e0ea7d20C4cEBAcfE83a818",
+      "lastIndexedBlock": 138020000,
+      "lastUpdated": "2025-08-14T04:20:17-04:00"
     },
     "Base Sepolia": {
       "chainId": 84532,
       "hyperlaneAddress": "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
-      "orcaCoinAddress": "0x02835cd4e26872fC474F220fD4603a24c5BD2641",
-      "dogCoinAddress": "0x268fb2951bB07a78722B08AF0ae4b448ea1668dE",
-      "lastIndexedBlock": 25380019,
-      "lastUpdated": "2025-08-14T03:55:58-04:00"
+      "orcaCoinAddress": "0xF62Aa5366d5B86312E5493C18170616346Dd9316",
+      "dogCoinAddress": "0xC2a5aE48cA992BD6f5Ea6e6FB872Cf52F3D6ffBd",
+      "lastIndexedBlock": 25380029,
+      "lastUpdated": "2025-08-14T04:21:07-04:00"
     },
     "Optimism Sepolia": {
       "chainId": 11155420,
       "hyperlaneAddress": "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
-      "orcaCoinAddress": "0xc12A9b5f3aAd115d5006166025549b8ac18264eB",
-      "dogCoinAddress": "0x644C3b1c287Bf07518f2759733e015470b172aEd",
-      "lastIndexedBlock": 27370021,
-      "lastUpdated": "2025-08-14T03:55:50-04:00"
+      "orcaCoinAddress": "0x83Dad72262A50Cd1dFcB6152c8f4C94B5bA5f65E",
+      "dogCoinAddress": "0xDe9D8354424F6ae1aBD715B532Fb7280eCe06810",
+      "lastIndexedBlock": 27370029,
+      "lastUpdated": "2025-08-14T04:21:03-04:00"
     },
     "Sepolia": {
       "chainId": 11155111,
       "hyperlaneAddress": "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
-      "orcaCoinAddress": "0x75a5d766060056D5d6182D059461d0fB27919500",
-      "dogCoinAddress": "0xD84505d6A1999D3FF1c4d8b9383F993b69C1f54D",
-      "lastIndexedBlock": 8319025,
-      "lastUpdated": "2025-08-14T03:55:53-04:00"
+      "orcaCoinAddress": "0xd7C5d07B43b17d29FcF4638Cab35922705C3b69a",
+      "dogCoinAddress": "0xF3A4Cb6464EC13E91135f3027a0FF46CF5560176",
+      "lastIndexedBlock": 8319000,
+      "lastUpdated": "2025-08-14T04:20:25-04:00"
     }
   }
 }

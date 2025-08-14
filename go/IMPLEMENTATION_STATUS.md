@@ -17,21 +17,17 @@
   - `make deploy-tokens` to deploy erc20 tokens, fund accounts, and setup allowances
   - `make open-basic-order` to open a simple onchain order
   - `make open-random-order` to open a random onchain order (random origin, destination, in/out amounts, etc.)
-  - `make run` to run the solver as is
-    - Currently listens to Open events and logs them (back fill if solver is behind on events is implemented)
+  - `make run` to run the solver
 
 ### **🏁 Milestones**
 
-- [x] **Fetch Open events**: The solver successfully listens for and fetches Open events
+- [x] **Fetch Open events**: The solver fetches historic and new Open events from each network
+- [x] **Decode Open events**: The solver decodes Open events to extract order details
+- [x] **Fill orders**: The solver fills orders by sending transactions to the origin chain
 
 ## 🚧 **IN PROGRESS - NEXT PRIORITY**
 
-- [ ] **Intent validation** - Ensure fill is plausible, i.e, token balances, order status, deadlines, etc.
-
-## 📋 **TODO - Next Focus**
-
-- [ ] **Fill execution** - Build and send fill transactions
-- [ ] **Order settlement?** - Handle order settlement (on origin chain) if necessary. Research hyperlane's dispatch settle
+- [ ] **Code cleanup**: Refactor and clean up code for better readability and maintainability. Decrease logging verbosity, ensure env settings are used for solver config
 
 ## 📋 **TODO - Future/Parallel Focus**
 

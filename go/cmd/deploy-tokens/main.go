@@ -58,9 +58,9 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	deployerKeyHex := os.Getenv("SOLVER_PRIVATE_KEY")
+	deployerKeyHex := os.Getenv("DEPLOYER_PRIVATE_KEY")
 	if deployerKeyHex == "" {
-		log.Fatal("SOLVER_PRIVATE_KEY environment variable is required")
+		log.Fatal("DEPLOYER_PRIVATE_KEY environment variable is required")
 	}
 
 	aliceKeyHex := os.Getenv("ALICE_PRIVATE_KEY")

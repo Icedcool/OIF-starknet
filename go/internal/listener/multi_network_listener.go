@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/NethermindEth/oif-starknet/go/internal/config"
 	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
 	"github.com/sirupsen/logrus"
 )
@@ -88,18 +89,12 @@ func (m *MultiNetworkListener) createNetworkListener(networkName string, network
 
 // getRPCURLForNetwork returns the RPC URL for a given network
 func (m *MultiNetworkListener) getRPCURLForNetwork(networkName string) string {
-	switch networkName {
-	case "Base Sepolia":
-		return "http://localhost:8548"
-	case "Sepolia":
-		return "http://localhost:8545"
-	case "Optimism Sepolia":
-		return "http://localhost:8546"
-	case "Arbitrum Sepolia":
-		return "http://localhost:8547"
-	default:
-		return "http://localhost:8548" // Default to Base Sepolia
+	rpcURL, err := config.GetRPCURL(networkName)
+	if err != nil {
+		m.logger.Warnf("Failed to get RPC URL for network %s, using default: %v", networkName, err)
+		return config.GetDefaultRPCURL()
 	}
+	return rpcURL
 }
 
 // Stop gracefully stops all network listeners

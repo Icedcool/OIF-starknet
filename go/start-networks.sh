@@ -2,16 +2,16 @@
 
 # Load environment variables from .env file
 if [ -f ".env" ]; then
-    export $(cat .env | grep -v '^#' | xargs)
-    echo "📋 Loaded environment variables from .env"
+	export $(cat .env | grep -v '^#' | xargs)
+	echo "📋 Loaded environment variables from .env"
 fi
 
 # Colors for each network
-ETH_COLOR="\033[36m"      # Cyan
-OPT_COLOR="\033[32m"      # Green
-ARB_COLOR="\033[33m"      # Yellow
-BASE_COLOR="\033[35m"     # Magenta
-RESET="\033[0m"           # Reset
+ETH_COLOR="\033[36m"  # Cyan
+OPT_COLOR="\033[32m"  # Green
+ARB_COLOR="\033[33m"  # Yellow
+BASE_COLOR="\033[35m" # Magenta
+RESET="\033[0m"       # Reset
 
 # Network IDs
 ETH_ID="[ETH]"
@@ -27,10 +27,10 @@ echo ""
 
 # Function to reset deployment state to fork block numbers
 reset_deployment_state() {
-    echo "🔄 Resetting deployment state to fork block numbers..."
-    
-    # Create the deployment state JSON with correct fork blocks
-    cat > "deployment-state.json" << EOF
+	echo "🔄 Resetting deployment state to fork block numbers..."
+
+	# Create the deployment state JSON with correct fork blocks
+	cat >"deployment-state.json" <<EOF
 {
   "networks": {
     "Sepolia": {
@@ -68,106 +68,106 @@ reset_deployment_state() {
   }
 }
 EOF
-    
-    echo "✅ Deployment state reset to fork block numbers"
-    echo "📝 Event listener will start from correct blocks"
+
+	echo "✅ Deployment state reset to fork block numbers"
+	echo "📝 Event listener will start from correct blocks"
 }
 
 # Function to start a testnet fork with color-coded logging
 start_network() {
-    local port=$1
-    local chain_id=$2
-    local color=$3
-    local id=$4
-    local testnet_name=$5
-    
-    # Choose RPC endpoint based on availability
-    local rpc_url
-    if [ -n "$ALCHEMY_API_KEY" ]; then
-        case $testnet_name in
-            "sepolia")
-                rpc_url="https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
-                ;;
-            "optimism-sepolia")
-                rpc_url="https://opt-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
-                ;;
-            "arbitrum-sepolia")
-                rpc_url="https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
-                ;;
-            "base-sepolia")
-                rpc_url="https://base-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
-                ;;
-        esac
-        echo -e "${color}${id}${RESET} Using Alchemy RPC for ${testnet_name}"
-    else
-        case $testnet_name in
-            "sepolia")
-                rpc_url="https://rpc.sepolia.org"
-                ;;
-            "optimism-sepolia")
-                rpc_url="https://sepolia.optimism.io"
-                ;;
-            "arbitrum-sepolia")
-                rpc_url="https://sepolia-rollup.arbitrum.io/rpc"
-                ;;
-            "base-sepolia")
-                rpc_url="https://sepolia.base.org"
-                ;;
-        esac
-        echo -e "${color}${id}${RESET} Using public RPC for ${testnet_name}"
-    fi
-    
-    	# Fork from block when contract was last active to preserve state
-	local fork_block
-			case $testnet_name in
-			"sepolia")
-				fork_block=8319000  # After the last transaction
-				;;
-			"optimism-sepolia")
-				fork_block=27370000  # After the last transaction
-				;;
-			"arbitrum-sepolia")
-				fork_block=138020000  # After the last transactions
-				;;
-			"base-sepolia")
-				fork_block=25380000  # After the last transaction
-				;;
-			*)
-				fork_block=8319001
-				;;
+	local port=$1
+	local chain_id=$2
+	local color=$3
+	local id=$4
+	local testnet_name=$5
+
+	# Choose RPC endpoint based on availability
+	local rpc_url
+	if [ -n "$ALCHEMY_API_KEY" ]; then
+		case $testnet_name in
+		"sepolia")
+			rpc_url="https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+			;;
+		"optimism-sepolia")
+			rpc_url="https://opt-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+			;;
+		"arbitrum-sepolia")
+			rpc_url="https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+			;;
+		"base-sepolia")
+			rpc_url="https://base-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
+			;;
 		esac
+		echo -e "${color}${id}${RESET} Using Alchemy RPC for ${testnet_name}"
+	else
+		case $testnet_name in
+		"sepolia")
+			rpc_url="https://rpc.sepolia.org"
+			;;
+		"optimism-sepolia")
+			rpc_url="https://sepolia.optimism.io"
+			;;
+		"arbitrum-sepolia")
+			rpc_url="https://sepolia-rollup.arbitrum.io/rpc"
+			;;
+		"base-sepolia")
+			rpc_url="https://sepolia.base.org"
+			;;
+		esac
+		echo -e "${color}${id}${RESET} Using public RPC for ${testnet_name}"
+	fi
+
+	# Fork from block when contract was last active to preserve state
+	local fork_block
+	case $testnet_name in
+	"sepolia")
+		fork_block=8319000 # After the last transaction
+		;;
+	"optimism-sepolia")
+		fork_block=27370000 # After the last transaction
+		;;
+	"arbitrum-sepolia")
+		fork_block=138020000 # After the last transactions
+		;;
+	"base-sepolia")
+		fork_block=25380000 # After the last transaction
+		;;
+	*)
+		fork_block=8319001
+		;;
+	esac
 	echo -e "${color}${id}${RESET} Forking ${testnet_name} from block ${fork_block} (when contract was last used)"
-    
-    # Start anvil with testnet fork and pipe output through color filter
-    	anvil --port $port --chain-id $chain_id --fork-url "$rpc_url" --fork-block-number ${fork_block} 2>&1 | while IFS= read -r line; do
-        echo -e "${color}${id}${RESET} $line"
-    done &
-    
-    # Store the PID
-    echo $! > "/tmp/anvil_$port.pid"
-    
-    echo -e "${color}${id}${RESET} ${testnet_name} fork started on port $port (Chain ID: $chain_id)"
+
+	# Start anvil with testnet fork and pipe output through color filter
+	anvil --port $port --chain-id $chain_id --fork-url "$rpc_url" --fork-block-number ${fork_block} 2>&1 | while IFS= read -r line; do
+		echo -e "${color}${id}${RESET} $line"
+	done &
+
+	# Store the PID
+	echo $! >"/tmp/anvil_$port.pid"
+
+	echo -e "${color}${id}${RESET} ${testnet_name} fork started on port $port (Chain ID: $chain_id)"
 }
 
 # Function to stop all networks
 cleanup() {
-    echo ""
-    echo "🛑 Stopping all networks..."
-    
-    # Kill all anvil processes
-    for port in 8545 8546 8547 8548; do
-        if [ -f "/tmp/anvil_$port.pid" ]; then
-            pid=$(cat "/tmp/anvil_$port.pid")
-            kill $pid 2>/dev/null || true
-            rm -f "/tmp/anvil_$port.pid"
-        fi
-    done
-    
-    # Also kill any remaining anvil processes
-    pkill -f "anvil" 2>/dev/null || true
-    
-    echo "✅ All networks stopped"
-    exit 0
+	echo ""
+	echo "🛑 Stopping all networks..."
+
+	# Kill all anvil processes
+	for port in 8545 8546 8547 8548; do
+		if [ -f "/tmp/anvil_$port.pid" ]; then
+			pid=$(cat "/tmp/anvil_$port.pid")
+			kill $pid 2>/dev/null || true
+			rm -f "/tmp/anvil_$port.pid"
+		fi
+	done
+
+	# Also kill any remaining anvil processes
+	pkill -f "anvil" 2>/dev/null || true
+
+	echo "✅ All networks stopped"
+	exit 0
 }
 
 # Set up signal handlers
@@ -181,17 +181,17 @@ reset_deployment_state
 
 # Check if ALCHEMY_API_KEY is set
 if [ -z "$ALCHEMY_API_KEY" ]; then
-    echo "⚠️  ALCHEMY_API_KEY not set!"
-    echo "💡 You'll be rate limited by the demo endpoint"
-    echo "💡 Set ALCHEMY_API_KEY in your .env for full access"
-    echo "💡 Or use alternative RPC endpoints (see script for options)"
-    echo ""
-    echo "🔗 Alternative RPC endpoints (free tiers):"
-    echo "   • Sepolia: https://rpc.sepolia.org"
-    echo "   • Optimism Sepolia: https://sepolia.optimism.io"
-    echo "   • Arbitrum Sepolia: https://sepolia-rollup.arbitrum.io/rpc"
-    echo "   • Base Sepolia: https://sepolia.base.org"
-    echo ""
+	echo "⚠️  ALCHEMY_API_KEY not set!"
+	echo "💡 You'll be rate limited by the demo endpoint"
+	echo "💡 Set ALCHEMY_API_KEY in your .env for full access"
+	echo "💡 Or use alternative RPC endpoints (see script for options)"
+	echo ""
+	echo "🔗 Alternative RPC endpoints (free tiers):"
+	echo "   • Sepolia: https://rpc.sepolia.org"
+	echo "   • Optimism Sepolia: https://sepolia.optimism.io"
+	echo "   • Arbitrum Sepolia: https://sepolia-rollup.arbitrum.io/rpc"
+	echo "   • Base Sepolia: https://sepolia.base.org"
+	echo ""
 fi
 
 # Start all networks

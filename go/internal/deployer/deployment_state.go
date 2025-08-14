@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/NethermindEth/oif-starknet/go/internal/config"
 )
 
 // DeploymentState holds the addresses of deployed contracts across all networks
@@ -27,35 +29,35 @@ type NetworkState struct {
 var defaultDeploymentState = DeploymentState{
 	Networks: map[string]NetworkState{
 		"Sepolia": {
-			ChainID:          11155111,
-			HyperlaneAddress: "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
+			ChainID:          config.Networks["Sepolia"].ChainID,
+			HyperlaneAddress: config.Networks["Sepolia"].HyperlaneAddress.Hex(),
 			OrcaCoinAddress:  "",
 			DogCoinAddress:   "",
-			LastIndexedBlock: 8319000, 
+			LastIndexedBlock: config.Networks["Sepolia"].ForkStartBlock,
 			LastUpdated:      "",
 		},
 		"Optimism Sepolia": {
-			ChainID:          11155420,
-			HyperlaneAddress: "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
+			ChainID:          config.Networks["Optimism Sepolia"].ChainID,
+			HyperlaneAddress: config.Networks["Optimism Sepolia"].HyperlaneAddress.Hex(),
 			OrcaCoinAddress:  "",
 			DogCoinAddress:   "",
-			LastIndexedBlock: 27370000,
+			LastIndexedBlock: config.Networks["Optimism Sepolia"].ForkStartBlock,
 			LastUpdated:      "",
 		},
 		"Arbitrum Sepolia": {
-			ChainID:          421614,
-			HyperlaneAddress: "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
+			ChainID:          config.Networks["Arbitrum Sepolia"].ChainID,
+			HyperlaneAddress: config.Networks["Arbitrum Sepolia"].HyperlaneAddress.Hex(),
 			OrcaCoinAddress:  "",
 			DogCoinAddress:   "",
-			LastIndexedBlock: 138020000, 
+			LastIndexedBlock: config.Networks["Arbitrum Sepolia"].ForkStartBlock,
 			LastUpdated:      "",
 		},
 		"Base Sepolia": {
-			ChainID:          84532,
-			HyperlaneAddress: "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
+			ChainID:          config.Networks["Base Sepolia"].ChainID,
+			HyperlaneAddress: config.Networks["Base Sepolia"].HyperlaneAddress.Hex(),
 			OrcaCoinAddress:  "",
 			DogCoinAddress:   "",
-			LastIndexedBlock: 25380000, 
+			LastIndexedBlock: config.Networks["Base Sepolia"].ForkStartBlock,
 			LastUpdated:      "",
 		},
 	},

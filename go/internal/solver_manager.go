@@ -105,7 +105,7 @@ func (sm *SolverManager) createHyperlane7683Solver() (*SolverModule, error) {
 		},
 		IntentSources: []types.IntentSource{
 			{
-				Address:            "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3", // Testnet address
+				Address:            config.Networks["Base Sepolia"].HyperlaneAddress.Hex(),
 				ChainName:          "Base Sepolia",
 				InitialBlock:       nil,  // Start from current block
 				PollInterval:       1000, // 1 second
@@ -149,7 +149,7 @@ func (sm *SolverManager) createHyperlane7683Solver() (*SolverModule, error) {
 		Listener: multiListener,
 		Filler:   hyperlaneFiller,
 		Config: &listener.ListenerConfig{
-			ContractAddress:    "0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3",
+			ContractAddress:    config.Networks["Base Sepolia"].HyperlaneAddress.Hex(),
 			ChainName:          "Multi-Network",
 			InitialBlock:       nil,
 			PollInterval:       1000,
@@ -161,20 +161,12 @@ func (sm *SolverManager) createHyperlane7683Solver() (*SolverModule, error) {
 
 // getRPCURLForChain returns the RPC URL for a given chain name
 func (sm *SolverManager) getRPCURLForChain(chainName string) string {
-	// Map chain names to RPC URLs for our local testnet setup
-	switch chainName {
-	case "Base Sepolia":
-		return "http://localhost:8548"
-	case "Sepolia":
-		return "http://localhost:8545"
-	case "Optimism Sepolia":
-		return "http://localhost:8546"
-	case "Arbitrum Sepolia":
-		return "http://localhost:8547"
-	default:
-		// Default to Base Sepolia for now
-		return "http://localhost:8548"
+	rpcURL, err := config.GetRPCURL(chainName)
+	if err != nil {
+		sm.logger.Warnf("Failed to get RPC URL for chain %s, using default: %v", chainName, err)
+		return config.GetDefaultRPCURL()
 	}
+	return rpcURL
 }
 
 // startSolver starts a solver and begins listening for events

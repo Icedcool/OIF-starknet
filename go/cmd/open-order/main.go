@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NethermindEth/oif-starknet/go/internal/config"
 	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
 	"github.com/NethermindEth/oif-starknet/go/pkg/ethutil"
 	"github.com/ethereum/go-ethereum"
@@ -45,11 +46,20 @@ func loadNetworks() error {
 		return fmt.Errorf("failed to load deployment state: %w", err)
 	}
 
-	networks = []NetworkConfig{
-		{"Sepolia", "http://localhost:8545", 11155111, common.HexToAddress("0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3"), common.Address{}, common.Address{}},
-		{"Optimism Sepolia", "http://localhost:8546", 11155420, common.HexToAddress("0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3"), common.Address{}, common.Address{}},
-		{"Arbitrum Sepolia", "http://localhost:8547", 421614, common.HexToAddress("0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3"), common.Address{}, common.Address{}},
-		{"Base Sepolia", "http://localhost:8548", 84532, common.HexToAddress("0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3"), common.Address{}, common.Address{}},
+	// Build networks from centralized config
+	networkNames := config.GetNetworkNames()
+	networks = make([]NetworkConfig, 0, len(networkNames))
+	
+	for _, networkName := range networkNames {
+		networkConfig := config.Networks[networkName]
+		networks = append(networks, NetworkConfig{
+			name:             networkConfig.Name,
+			url:              networkConfig.RPCURL,
+			chainID:          networkConfig.ChainID,
+			hyperlaneAddress: networkConfig.HyperlaneAddress,
+			orcaCoinAddress:  common.Address{},
+			dogCoinAddress:   common.Address{},
+		})
 	}
 
 	// Update with actual deployed addresses from state
@@ -72,20 +82,12 @@ func loadNetworks() error {
 }
 
 // getHyperlaneDomain returns the Hyperlane domain ID for a given network
-// These are the exact values our forked networks are using as chain IDs
 func getHyperlaneDomain(networkName string) uint32 {
-	switch networkName {
-	case "Sepolia":
-		return 11156380 // 0xaa37dc - matches actual contract (from fill event)
-	case "Optimism Sepolia":
-		return 11156391 // 0xaa36a7 - matches actual contract (from fill event)
-	case "Arbitrum Sepolia":
-		return 421614 // 0x66eee - matches our fork
-	case "Base Sepolia":
-		return 84532 // 0x14a34 - matches actual contract (from router enrollment)
-	default:
+	domain, err := config.GetHyperlaneDomain(networkName)
+	if err != nil {
 		return 0
 	}
+	return domain
 }
 
 // Test user configuration

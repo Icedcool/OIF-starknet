@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/NethermindEth/oif-starknet/go/internal/config"
 	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
 	"github.com/NethermindEth/oif-starknet/go/pkg/ethutil"
 	"github.com/ethereum/go-ethereum"
@@ -28,16 +29,29 @@ var testUsers = []string{
 	"0x90F79bf6EB2c4f870365E785982E1f101E93b906", // Charlie (Account 3)
 }
 
-// Network configuration
-var networks = []struct {
+// Network configuration - built from centralized config
+var networks = func() []struct {
 	name string
 	url  string
-}{
-	{"Sepolia", "http://localhost:8545"},
-	{"Optimism Sepolia", "http://localhost:8546"},
-	{"Arbitrum Sepolia", "http://localhost:8547"},
-	{"Base Sepolia", "http://localhost:8548"},
-}
+} {
+	networkNames := config.GetNetworkNames()
+	networks := make([]struct {
+		name string
+		url  string
+	}, 0, len(networkNames))
+	
+	for _, networkName := range networkNames {
+		networkConfig := config.Networks[networkName]
+		networks = append(networks, struct {
+			name string
+			url  string
+		}{
+			name: networkConfig.Name,
+			url:  networkConfig.RPCURL,
+		})
+	}
+	return networks
+}()
 
 func main() {
 	if err := godotenv.Load(); err != nil {
@@ -377,8 +391,11 @@ func setAllowances(client *ethclient.Client, aliceKey, bobKey, charlieKey *ecdsa
 		return fmt.Errorf("failed to get chain ID: %w", err)
 	}
 
-	// Hyperlane7683 contract address (pre-deployed on testnets)
-	hyperlaneAddress := common.HexToAddress("0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3")
+	// Get Hyperlane address from centralized config
+	hyperlaneAddress, err := config.GetHyperlaneAddress("Base Sepolia") // Use Base Sepolia as default
+	if err != nil {
+		return fmt.Errorf("failed to get Hyperlane address: %w", err)
+	}
 
 	// Users to set allowances for
 	users := []struct {
@@ -487,8 +504,11 @@ func verifyBalancesAndAllowances(client *ethclient.Client, aliceKey, bobKey, cha
 	// Expected balance after funding
 	expectedBalance := new(big.Int).Mul(big.NewInt(100000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)) // 100,000 tokens
 
-	// Hyperlane7683 contract address
-	hyperlaneAddress := common.HexToAddress("0xf614c6bF94b022E16BEF7dBecF7614FFD2b201d3")
+	// Get Hyperlane address from centralized config
+	hyperlaneAddress, err := config.GetHyperlaneAddress("Base Sepolia") // Use Base Sepolia as default
+	if err != nil {
+		return fmt.Errorf("failed to get Hyperlane address: %w", err)
+	}
 
 	// Users to verify
 	users := []struct {

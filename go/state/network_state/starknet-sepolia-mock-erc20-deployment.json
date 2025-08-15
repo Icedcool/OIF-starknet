@@ -1,0 +1,18 @@
+{
+  "deploymentTime": "2025-08-15T13:16:41-04:00",
+  "networkName": "Starknet Sepolia",
+  "tokens": [
+    {
+      "name": "OrcaCoin",
+      "symbol": "ORCA",
+      "address": "0x6b7ccedfe086238754ca39d1faf1eae0c7a812b649e5f68b035713fea099589",
+      "classHash": "0x5eb8e84b0d7a11a7c274f8af01c2ce10c8d15df54c28bbf01f9a8325bba07a9"
+    },
+    {
+      "name": "DogCoin",
+      "symbol": "DOG",
+      "address": "0x53b87fcf60c1a63d8ba8df4eb53817b3678ab8210f78c926858e5be782c13b2",
+      "classHash": "0x5eb8e84b0d7a11a7c274f8af01c2ce10c8d15df54c28bbf01f9a8325bba07a9"
+    }
+  ]
+}

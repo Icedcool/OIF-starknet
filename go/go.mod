@@ -5,8 +5,8 @@ go 1.23.4
 toolchain go1.24.5
 
 require (
-	github.com/NethermindEth/juno v0.12.2
-	github.com/NethermindEth/starknet.go v0.7.3
+	github.com/NethermindEth/juno v0.14.0
+	github.com/NethermindEth/starknet.go v0.13.1
 	github.com/ethereum/go-ethereum v1.16.2
 	github.com/joho/godotenv v1.5.1
 	github.com/sirupsen/logrus v1.9.3

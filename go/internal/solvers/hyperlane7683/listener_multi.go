@@ -35,14 +35,62 @@ func (m *multiNetworkListener) Start(ctx context.Context, handler listener.Event
 }
 
 func (m *multiNetworkListener) createNetworkListener(networkName string, networkState deployer.NetworkState, handler listener.EventHandler, ctx context.Context) error {
-    rpcURL := m.getRPCURLForNetwork(networkName)
-    cfg := &listener.ListenerConfig{ ContractAddress: networkState.HyperlaneAddress, ChainName: networkName, InitialBlock: big.NewInt(int64(networkState.LastIndexedBlock)), PollInterval: 1000, ConfirmationBlocks: 2, MaxBlockRange: 500 }
-    l, err := NewEVMListener(cfg, rpcURL)
-    if err != nil { return fmt.Errorf("failed to create EVM listener for %s: %v", networkName, err) }
-    if _, err = l.Start(ctx, handler); err != nil { return fmt.Errorf("failed to start listener for %s: %v", networkName, err) }
-    m.mu.Lock(); m.listeners[networkName] = l; m.mu.Unlock()
-    fmt.Printf("✅ Started listener for %s on %s\n", networkName, rpcURL)
-    return nil
+	rpcURL := m.getRPCURLForNetwork(networkName)
+	
+	// Get network-specific listener configuration
+	pollInterval, confirmationBlocks, maxBlockRange, err := config.GetListenerConfig(networkName)
+	if err != nil {
+		return fmt.Errorf("failed to get listener config for %s: %v", networkName, err)
+	}
+	
+	// Create appropriate listener based on network type
+	var l listener.BaseListener
+	
+	if networkName == "Starknet Sepolia" {
+		// TODO: Implement StarknetListener
+		fmt.Printf("⚠️  Creating Starknet listener for %s (implementation pending)\n", networkName)
+		
+		// Use the proper configuration helper with network-specific values
+		cfg := listener.NewListenerConfig(
+			networkState.HyperlaneAddress,
+			networkName,
+			big.NewInt(int64(networkState.LastIndexedBlock)),
+			pollInterval,
+			confirmationBlocks,
+			maxBlockRange,
+		)
+		
+		l, err = NewStarknetListener(cfg, rpcURL)
+		if err != nil {
+			return fmt.Errorf("failed to create Starknet listener for %s: %v", networkName, err)
+		}
+	} else {
+		// EVM networks - use the proper configuration helper with network-specific values
+		cfg := listener.NewListenerConfig(
+			networkState.HyperlaneAddress,
+			networkName,
+			big.NewInt(int64(networkState.LastIndexedBlock)),
+			pollInterval,
+			confirmationBlocks,
+			maxBlockRange,
+		)
+		
+		l, err = NewEVMListener(cfg, rpcURL)
+		if err != nil {
+			return fmt.Errorf("failed to create EVM listener for %s: %v", networkName, err)
+		}
+	}
+	
+	if _, err = l.Start(ctx, handler); err != nil {
+		return fmt.Errorf("failed to start listener for %s: %v", networkName, err)
+	}
+	
+	m.mu.Lock()
+	m.listeners[networkName] = l
+	m.mu.Unlock()
+	
+	fmt.Printf("✅ Started listener for %s on %s\n", networkName, rpcURL)
+	return nil
 }
 
 func (m *multiNetworkListener) getRPCURLForNetwork(networkName string) string {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/NethermindEth/juno/core/felt"
@@ -160,7 +162,7 @@ func main() {
 	}
 
 	// Save deployment info
-	saveDeploymentInfo(classHash, deployedAddress.String(), txHash.String(), salt.String())
+	saveDeploymentInfo(classHash, deployedAddress.String(), txHash.String(), salt.String(), networkName)
 }
 
 // getClassHash retrieves the class hash from declaration file or environment variable
@@ -171,8 +173,9 @@ func getClassHash(networkName string) (string, error) {
 		return envClassHash, nil
 	}
 
-	// Try to read from declaration file
-	declarationFile := fmt.Sprintf("hyperlane7683_declaration_%s.json", networkName)
+	// Try to read from declaration file in canonical state directory
+	stateDir := filepath.Clean(filepath.Join("state", "network_state"))
+	declarationFile := filepath.Join(stateDir, fmt.Sprintf("%s-hyperlane7683-declaration.json", sanitizeNetworkName(networkName)))
 
 	// Read and parse declaration file
 	data, err := os.ReadFile(declarationFile)
@@ -191,6 +194,47 @@ func getClassHash(networkName string) (string, error) {
 
 	fmt.Printf("📋 Using class hash from declaration file %s: %s\n", declarationFile, declaration.ClassHash)
 	return declaration.ClassHash, nil
+}
+
+// saveDeploymentInfo saves deployment information to a file
+func saveDeploymentInfo(classHash, deployedAddress, txHash, salt, networkName string) {
+	deploymentInfo := map[string]string{
+		"classHash":       classHash,
+		"deployedAddress": deployedAddress,
+		"transactionHash": txHash,
+		"salt":            salt,
+		"deploymentTime":  time.Now().Format(time.RFC3339),
+	}
+
+	data, err := json.MarshalIndent(deploymentInfo, "", "  ")
+	if err != nil {
+		fmt.Printf("⚠️  Failed to marshal deployment info: %s\n", err)
+		return
+	}
+
+	// Ensure canonical state directory exists
+	stateDir := filepath.Clean(filepath.Join("state", "network_state"))
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		fmt.Printf("⚠️  Failed to create state directory: %s\n", err)
+		return
+	}
+
+	filename := filepath.Join(stateDir, fmt.Sprintf("%s-hyperlane7683-deployment.json", sanitizeNetworkName(networkName)))
+	if err := os.WriteFile(filename, data, 0644); err != nil {
+		fmt.Printf("⚠️  Failed to save deployment info: %s\n", err)
+		return
+	}
+
+	fmt.Printf("💾 Deployment info saved to %s\n", filename)
+}
+
+// sanitizeNetworkName converts a human network name to a safe slug
+func sanitizeNetworkName(name string) string {
+	s := strings.ToLower(strings.TrimSpace(name))
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "/", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+	return s
 }
 
 // buildConstructorCalldata builds the constructor calldata for Hyperlane7683
@@ -216,28 +260,4 @@ func buildConstructorCalldata(permit2Addr, mailboxAddr, ownerAddr, hookAddr, ism
 	ism := toFelt(ismAddr)
 
 	return []*felt.Felt{permit2, mailbox, owner, hook, ism}
-}
-
-// saveDeploymentInfo saves deployment information to a file
-func saveDeploymentInfo(classHash, deployedAddress, txHash, salt string) {
-	deploymentInfo := map[string]string{
-		"classHash":       classHash,
-		"deployedAddress": deployedAddress,
-		"transactionHash": txHash,
-		"salt":            salt,
-		"deploymentTime":  time.Now().Format(time.RFC3339),
-	}
-
-	data, err := json.MarshalIndent(deploymentInfo, "", "  ")
-	if err != nil {
-		fmt.Printf("⚠️  Failed to marshal deployment info: %s\n", err)
-		return
-	}
-
-	if err := os.WriteFile("hyperlane7683_deployment.json", data, 0644); err != nil {
-		fmt.Printf("⚠️  Failed to save deployment info: %s\n", err)
-		return
-	}
-
-	fmt.Println("💾 Deployment info saved to hyperlane7683_deployment.json")
 }

@@ -31,8 +31,13 @@ echo ""
 reset_deployment_state() {
 	echo "🔄 Resetting deployment state to fork block numbers..."
 
+	# Ensure state directory exists (local go/state/network_state)
+	STATE_DIR="state/network_state"
+	mkdir -p "$STATE_DIR"
+	STATE_FILE="$STATE_DIR/deployment-state.json"
+
 	# Create the deployment state JSON with correct fork blocks
-	cat >"deployment-state.json" <<EOF
+	cat >"$STATE_FILE" <<EOF
 {
   "networks": {
     "Sepolia": {

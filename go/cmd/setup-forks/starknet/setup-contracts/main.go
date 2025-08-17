@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
+	central "github.com/NethermindEth/oif-starknet/go/internal/deployer"
 )
 
 // Token deployment info structure
@@ -39,6 +40,19 @@ const (
 	// Default deployment file path
 	DeploymentFilePath = "state/network_state/starknet-sepolia-mock-erc20-deployment.json"
 )
+
+// loadCentralAddresses loads Hyperlane, OrcaCoin, DogCoin from centralized deployment state
+func loadCentralAddresses(networkName string) (hyperlane string, orca string, dog string, err error) {
+	state, e := central.GetDeploymentState()
+	if e != nil {
+		return "", "", "", fmt.Errorf("failed to read centralized deployment-state.json: %w", e)
+	}
+	net, ok := state.Networks[networkName]
+	if !ok {
+		return "", "", "", fmt.Errorf("network %s not found in centralized state", networkName)
+	}
+	return net.HyperlaneAddress, net.OrcaCoinAddress, net.DogCoinAddress, nil
+}
 
 func main() {
 	if err := godotenv.Load(); err != nil {
@@ -125,29 +139,15 @@ func main() {
 		panic(fmt.Sprintf("❌ Failed to initialize account: %s", err))
 	}
 
-	// Load token deployment info
-	tokens, err := loadTokenDeploymentInfo(networkName)
+	// Load addresses from centralized deployment-state
+	hyperlaneAddr, orcaAddr, dogAddr, err := loadCentralAddresses(networkName)
 	if err != nil {
-		panic(fmt.Sprintf("❌ Failed to load token deployment info: %s", err))
+		panic(fmt.Sprintf("❌ Failed to load centralized addresses: %s", err))
 	}
 
-	if len(tokens) < 2 {
-		panic("❌ Expected at least 2 tokens (OrcaCoin and DogCoin)")
-	}
-
-	// Find OrcaCoin and DogCoin
-	var orcaCoin, dogCoin TokenInfo
-	for _, token := range tokens {
-		if token.Name == "OrcaCoin" {
-			orcaCoin = token
-		} else if token.Name == "DogCoin" {
-			dogCoin = token
-		}
-	}
-
-	if orcaCoin.Address == "" || dogCoin.Address == "" {
-		panic("❌ Could not find OrcaCoin or DogCoin addresses")
-	}
+	// Prepare TokenInfo based on centralized state
+	orcaCoin := TokenInfo{Name: "OrcaCoin", Symbol: "ORCA", Address: orcaAddr}
+	dogCoin := TokenInfo{Name: "DogCoin", Symbol: "DOG", Address: dogAddr}
 
 	fmt.Printf("📋 OrcaCoin: %s\n", orcaCoin.Address)
 	fmt.Printf("📋 DogCoin: %s\n", dogCoin.Address)
@@ -160,19 +160,15 @@ func main() {
 
 	// Set allowances for Hyperlane7683
 	fmt.Println("\n🔐 Setting allowances for Hyperlane7683...")
-	hyperlaneAddress, err := getHyperlaneAddress(networkName)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: Could not get Hyperlane address: %s\n", err)
-		fmt.Println("   Skipping allowance setup...")
-	} else {
-		if err := setAllowances(accnt, orcaCoin, dogCoin, hyperlaneAddress, aliceAddress, bobAddress, solverAddress); err != nil {
-			panic(fmt.Sprintf("❌ Failed to set allowances: %s", err))
-		}
+	fmt.Printf("   📋 Found Hyperlane7683 at: %s\n", hyperlaneAddr)
+	fmt.Println("   🔐 Setting allowances for Hyperlane7683...")
+	if err := setAllowances(accnt, orcaCoin, dogCoin, hyperlaneAddr, aliceAddress, bobAddress, solverAddress); err != nil {
+		panic(fmt.Sprintf("❌ Failed to set allowances: %s", err))
 	}
 
 	// Verify balances and allowances after everything is set
 	fmt.Printf("\n🔍 Verifying balances and allowances...\n")
-	if err := verifyBalancesAndAllowances(accnt, orcaCoin, dogCoin, hyperlaneAddress, aliceAddress, bobAddress, solverAddress); err != nil {
+	if err := verifyBalancesAndAllowances(accnt, orcaCoin, dogCoin, hyperlaneAddr, aliceAddress, bobAddress, solverAddress); err != nil {
 		fmt.Printf("❌ Verification failed: %v\n", err)
 	} else {
 		fmt.Printf("✅ All verifications passed!\n")

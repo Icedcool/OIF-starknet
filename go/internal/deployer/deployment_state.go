@@ -239,6 +239,23 @@ func saveStateLocked(state *DeploymentState) error {
 
 // getStateFilePath returns the path to the deployment state file
 func getStateFilePath() string {
-	// Store in the go directory for easy access
-	return "deployment-state.json"
+	// Allow override via environment variable
+	if custom := os.Getenv("STATE_FILE"); custom != "" {
+		return custom
+	}
+
+	// Prefer local go directory state path
+	candidates := []string{
+		"state/network_state/deployment-state.json",
+		"deployment-state.json",
+	}
+	for _, p := range candidates {
+		dir := filepath.Dir(p)
+		if _, err := os.Stat(dir); err == nil {
+			return p
+		}
+	}
+
+	// Fallback to local state path
+	return "state/network_state/deployment-state.json"
 }

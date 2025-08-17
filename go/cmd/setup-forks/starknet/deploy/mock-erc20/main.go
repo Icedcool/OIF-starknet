@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/NethermindEth/juno/core/felt"
@@ -20,8 +22,8 @@ import (
 
 // Token deployment configuration
 const (
-	// Default class hash file path
-	DeclarationFilePath = "state/network_state/starknet-sepolia-mock-erc20.json"
+	// Default class hash file path (local go/state)
+	DeclarationFilePath = "state/network_state/starknet-sepolia-mock-erc20-declaration.json"
 )
 
 // DeclarationInfo represents the structure of the declaration file
@@ -215,18 +217,23 @@ func getClassHash(networkName string) (string, error) {
 		return envClassHash, nil
 	}
 
-	// Try to read from declaration file
-	declarationFile := fmt.Sprintf("mock_erc20_declaration_%s.json", networkName)
+	// Try to read from declaration file in canonical state directory, with fallback to legacy path
+	stateDir := filepath.Clean(filepath.Join("state", "network_state"))
+	declarationFile := filepath.Join(stateDir, fmt.Sprintf("%s-mock-erc20-declaration.json", sanitizeNetworkName(networkName)))
 
 	// Check if declaration file exists
 	if _, err := os.Stat(declarationFile); os.IsNotExist(err) {
 		// Try the default declaration file
-		if _, err := os.Stat(DeclarationFilePath); os.IsNotExist(err) {
-			return "", fmt.Errorf("no declaration file found and MOCK_ERC20_CLASS_HASH not set. Please either:\n"+
-				"1. Set MOCK_ERC20_CLASS_HASH environment variable, or\n"+
-				"2. Ensure declaration file exists: %s", DeclarationFilePath)
+		if _, err := os.Stat(DeclarationFilePath); err == nil {
+			declarationFile = DeclarationFilePath
+		} else {
+			legacy := fmt.Sprintf("mock_erc20_declaration_%s.json", networkName)
+			if _, err := os.Stat(legacy); err == nil {
+				declarationFile = legacy
+			} else {
+				return "", fmt.Errorf("no declaration file found and MOCK_ERC20_CLASS_HASH not set. Expected one of: %s, %s, %s", declarationFile, DeclarationFilePath, legacy)
+			}
 		}
-		declarationFile = DeclarationFilePath
 	}
 
 	// Read and parse declaration file
@@ -262,11 +269,27 @@ func saveDeploymentInfo(tokens []TokenInfo, networkName string) {
 		return
 	}
 
-	filename := fmt.Sprintf("mock_erc20_deployment_%s.json", networkName)
+	// Ensure canonical state directory exists
+	stateDir := filepath.Clean(filepath.Join("state", "network_state"))
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		fmt.Printf("⚠️  Failed to create state directory: %s\n", err)
+		return
+	}
+
+	filename := filepath.Join(stateDir, fmt.Sprintf("%s-mock-erc20-deployment.json", sanitizeNetworkName(networkName)))
 	if err := os.WriteFile(filename, data, 0644); err != nil {
 		fmt.Printf("⚠️  Failed to save deployment info: %s\n", err)
 		return
 	}
 
 	fmt.Printf("💾 Deployment info saved to %s\n", filename)
+}
+
+// sanitizeNetworkName converts a human network name to a safe slug
+func sanitizeNetworkName(name string) string {
+	s := strings.ToLower(strings.TrimSpace(name))
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "/", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+	return s
 }

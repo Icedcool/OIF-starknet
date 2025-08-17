@@ -15,6 +15,8 @@ import (
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/NethermindEth/starknet.go/utils"
 	"github.com/joho/godotenv"
+
+	githubDeployer "github.com/NethermindEth/oif-starknet/go/internal/deployer"
 )
 
 // Network configuration - will be loaded from deployment state
@@ -32,8 +34,7 @@ type NetworkConfig struct {
 
 // loadNetworks loads network configuration from deployment state
 func loadNetworks() error {
-	// For now, hardcode the Starknet network and load token addresses from files
-	// TODO: Integrate with centralized config system
+	// Base network entry
 	networks = []NetworkConfig{
 		{
 			name:             "Starknet Sepolia",
@@ -45,24 +46,39 @@ func loadNetworks() error {
 		},
 	}
 
-	// Load token addresses from deployment files
-	for i, network := range networks {
-		if network.name == "Starknet Sepolia" {
-			// Load Hyperlane7683 address
-			if hyperlaneAddr, err := loadHyperlaneAddress(); err == nil {
-				networks[i].hyperlaneAddress = hyperlaneAddr
-				fmt.Printf("   🔍 Loaded %s Hyperlane7683: %s\n", network.name, hyperlaneAddr)
+	// Prefer centralized deployment state managed by internal/deployer
+	state, err := githubDeployer.GetDeploymentState()
+	if err == nil {
+		if sn, ok := state.Networks["Starknet Sepolia"]; ok {
+			for i := range networks {
+				if networks[i].name == "Starknet Sepolia" {
+					networks[i].hyperlaneAddress = sn.HyperlaneAddress
+					networks[i].orcaCoinAddress = sn.OrcaCoinAddress
+					networks[i].dogCoinAddress = sn.DogCoinAddress
+					fmt.Printf("   🔍 Loaded centralized state for %s\n", networks[i].name)
+					fmt.Printf("   🔍 Hyperlane7683: %s\n", networks[i].hyperlaneAddress)
+					fmt.Printf("   🔍 OrcaCoin: %s\n", networks[i].orcaCoinAddress)
+					fmt.Printf("   🔍 DogCoin: %s\n", networks[i].dogCoinAddress)
+				}
 			}
-
-			// Load token addresses
-			if tokens, err := loadTokenAddresses(); err == nil {
-				for _, token := range tokens {
-					if token.Name == "OrcaCoin" {
-						networks[i].orcaCoinAddress = token.Address
-						fmt.Printf("   🔍 Loaded %s OrcaCoin: %s\n", network.name, token.Address)
-					} else if token.Name == "DogCoin" {
-						networks[i].dogCoinAddress = token.Address
-						fmt.Printf("   🔍 Loaded %s DogCoin: %s\n", network.name, token.Address)
+		}
+	} else {
+		// Fallback to legacy per-file state if centralized state missing
+		for i, network := range networks {
+			if network.name == "Starknet Sepolia" {
+				if hyperlaneAddr, err := loadHyperlaneAddress(); err == nil && hyperlaneAddr != "" {
+					networks[i].hyperlaneAddress = hyperlaneAddr
+					fmt.Printf("   🔍 Loaded %s Hyperlane7683: %s\n", network.name, hyperlaneAddr)
+				}
+				if tokens, err := loadTokenAddresses(); err == nil {
+					for _, token := range tokens {
+						if token.Name == "OrcaCoin" {
+							networks[i].orcaCoinAddress = token.Address
+							fmt.Printf("   🔍 Loaded %s OrcaCoin: %s\n", network.name, token.Address)
+						} else if token.Name == "DogCoin" {
+							networks[i].dogCoinAddress = token.Address
+							fmt.Printf("   🔍 Loaded %s DogCoin: %s\n", network.name, token.Address)
+						}
 					}
 				}
 			}
@@ -98,13 +114,58 @@ func loadHyperlaneAddress() (string, error) {
 	return "", fmt.Errorf("could not find Hyperlane deployment file in any of the expected paths")
 }
 
+// loadDeploymentState loads addresses from the centralized deployment state
+func loadDeploymentState() error {
+	// Try multiple possible paths
+	paths := []string{
+		"state/network_state/deployment-state.json",
+		"../state/network_state/deployment-state.json",
+		"../../state/network_state/deployment-state.json",
+	}
+
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			fmt.Printf("   🔍 Loaded deployment state from: %s\n", path)
+			var deploymentState struct {
+				Networks map[string]struct {
+					ChainID          uint64 `json:"chainId"`
+					HyperlaneAddress string `json:"hyperlaneAddress"`
+					OrcaCoinAddress  string `json:"orcaCoinAddress"`
+					DogCoinAddress   string `json:"dogCoinAddress"`
+				} `json:"networks"`
+			}
+			if err := json.Unmarshal(data, &deploymentState); err != nil {
+				continue
+			}
+
+			// Find Starknet Sepolia network
+			if starknet, exists := deploymentState.Networks["Starknet Sepolia"]; exists {
+				for i := range networks {
+					if networks[i].name == "Starknet Sepolia" {
+						networks[i].hyperlaneAddress = starknet.HyperlaneAddress
+						networks[i].orcaCoinAddress = starknet.OrcaCoinAddress
+						networks[i].dogCoinAddress = starknet.DogCoinAddress
+						fmt.Printf("   🔍 Loaded %s Hyperlane7683: %s\n", networks[i].name, starknet.HyperlaneAddress)
+						fmt.Printf("   🔍 Loaded %s OrcaCoin: %s\n", networks[i].name, starknet.OrcaCoinAddress)
+						fmt.Printf("   🔍 Loaded %s DogCoin: %s\n", networks[i].name, starknet.DogCoinAddress)
+						return nil
+					}
+				}
+			}
+		}
+	}
+
+	return fmt.Errorf("could not find deployment state file or Starknet Sepolia network")
+}
+
 // loadTokenAddresses loads token addresses from deployment file
 func loadTokenAddresses() ([]TokenInfo, error) {
 	// Try multiple possible paths
 	paths := []string{
 		"state/network_state/starknet-sepolia-mock-erc20-deployment.json",
 		"../state/network_state/starknet-sepolia-mock-erc20-deployment.json",
-		"../../state/network_state/starknet-sepolia-mock-erc20-deployment.json",
+		"../../state/network_state/deployment-state.json",
 	}
 
 	for _, path := range paths {

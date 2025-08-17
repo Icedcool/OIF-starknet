@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -149,11 +150,27 @@ func saveDeclarationInfo(txHash, classHash, networkName string) {
 		return
 	}
 
-	filename := fmt.Sprintf("hyperlane7683_declaration_%s.json", networkName)
+	// Ensure canonical state directory exists (local go/state)
+	stateDir := filepath.Clean(filepath.Join("state", "network_state"))
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		fmt.Printf("⚠️  Failed to create state directory: %s\n", err)
+		return
+	}
+
+	filename := filepath.Join(stateDir, fmt.Sprintf("%s-hyperlane7683-declaration.json", sanitizeNetworkName(networkName)))
 	if err := os.WriteFile(filename, data, 0644); err != nil {
 		fmt.Printf("⚠️  Failed to save declaration info: %s\n", err)
 		return
 	}
 
 	fmt.Printf("💾 Declaration info saved to %s\n", filename)
+}
+
+// sanitizeNetworkName converts a human network name to a safe slug
+func sanitizeNetworkName(name string) string {
+	s := strings.ToLower(strings.TrimSpace(name))
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "/", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+	return s
 }

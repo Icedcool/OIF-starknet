@@ -18,10 +18,41 @@ source = "registry+https://scarbs.xyz/"
 checksum = "sha256:72bdee057923061f6719c82ac9d92c9c9bb39f3fbb9c369f64aa9e6d5b0b2425"
 
 [[package]]
+name = "alexandria_encoding"
+version = "0.4.0"
+source = "registry+https://scarbs.xyz/"
+checksum = "sha256:aeb4c49cfa9553f8c801b9631961b690056cfa1d24ec9e8566be1bcbf4ef44c1"
+dependencies = [
+ "alexandria_bytes",
+ "alexandria_data_structures",
+ "alexandria_math",
+ "alexandria_numeric",
+]
+
+[[package]]
 name = "alexandria_math"
 version = "0.4.0"
 source = "registry+https://scarbs.xyz/"
 checksum = "sha256:0ad256055661ed5b29ccef7bddbb44136995641cf537a6b259b94b6b6df14133"
+
+[[package]]
+name = "alexandria_numeric"
+version = "0.4.0"
+source = "registry+https://scarbs.xyz/"
+checksum = "sha256:4404ef7dad3e2c05bc9130802f91869e05d3a9f36dc9e4d2d0e29c1d568258e2"
+dependencies = [
+ "alexandria_math",
+ "alexandria_searching",
+]
+
+[[package]]
+name = "alexandria_searching"
+version = "0.4.0"
+source = "registry+https://scarbs.xyz/"
+checksum = "sha256:d678ddd9a637afeffe0047c5b6ce10268796dd75e2070952e0f6602c538d2fc1"
+dependencies = [
+ "alexandria_data_structures",
+]
 
 [[package]]
 name = "alexandria_storage"
@@ -58,6 +89,7 @@ name = "oif_starknet"
 version = "0.1.0"
 dependencies = [
  "alexandria_bytes",
+ "alexandria_encoding",
  "contracts",
  "mocks",
  "openzeppelin_access",

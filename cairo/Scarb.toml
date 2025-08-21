@@ -5,6 +5,7 @@ edition = "2024_07"
 
 [dependencies]
 alexandria_bytes = "0.4.0"
+alexandria_encoding = "0.4.0"
 contracts = { path = "../../hyperlane-starknet/cairo/" }
 mocks = { path = "../../hyperlane-starknet/cairo/" }
 openzeppelin_token = "0.20.0"

@@ -196,7 +196,7 @@ pub struct GaslessCrossChainOrder {
     pub origin_chain_id: u32,
     pub open_deadline: u64,
     pub fill_deadline: u64,
-    pub order_data_type: felt252,
+    pub order_data_type: u256,
     pub order_data: Bytes,
 }
 
@@ -205,7 +205,7 @@ pub struct GaslessCrossChainOrder {
 #[derive(Serde, Drop, Clone)]
 pub struct OnchainCrossChainOrder {
     pub fill_deadline: u64,
-    pub order_data_type: felt252,
+    pub order_data_type: u256,
     pub order_data: Bytes,
 }
 

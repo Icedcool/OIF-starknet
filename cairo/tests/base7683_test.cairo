@@ -50,7 +50,7 @@ pub fn _prepare_gasless_order(
     nonce: felt252,
     open_deadline: u64,
     fill_deadline: u64,
-    order_data_type: felt252,
+    order_data_type: u256,
     setup: Setup,
 ) -> GaslessCrossChainOrder {
     GaslessCrossChainOrder {
@@ -70,7 +70,7 @@ pub fn _prepare_gasless_order(
 fn test_open_works(fill_deadline: u64) {
     let setup = setup();
     let order_data: Bytes = Into::<ByteArray, Bytes>::into("some order data");
-    let order_type: felt252 = 'some order type';
+    let order_type: u256 = 'some order type'.into();
     let order = _prepare_onchain_order(order_data.clone(), fill_deadline, order_type);
 
     start_cheat_caller_address(
@@ -128,7 +128,7 @@ fn test_open_works(fill_deadline: u64) {
 fn test_open_INVALID_NONCE(fill_deadline: u64) {
     let setup = setup();
     let order_data: Bytes = Into::<ByteArray, Bytes>::into("some order data");
-    let order_type: felt252 = 'some order type';
+    let order_type: u256 = 'some order type'.into();
     let order = _prepare_onchain_order(order_data.clone(), fill_deadline, order_type);
 
     start_cheat_caller_address(setup.base.contract_address, setup.kaka.account.contract_address);
@@ -444,7 +444,7 @@ fn test_fill_INVALID_ORDER_STATUS_OPENED(fill_deadline: u64) {
     let setup = setup();
     let order_data = Into::<ByteArray, Bytes>::into("some order data");
     let order_id = 'someId'.into();
-    let order_type: felt252 = 'some order type';
+    let order_type: u256 = 'some order type'.into();
     let order = _prepare_onchain_order(order_data.clone(), fill_deadline, order_type);
 
     // Open order

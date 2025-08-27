@@ -41,7 +41,7 @@ pub trait IMockBasicSwap7683<TState> {
 
     fn resolved_order(
         self: @TState,
-        order_type: felt252,
+        order_type: u256,
         sender: ContractAddress,
         open_deadline: u64,
         fill_deadline: u64,
@@ -220,7 +220,7 @@ pub mod MockBasicSwap7683 {
 
         fn resolved_order(
             self: @ContractState,
-            order_type: felt252,
+            order_type: u256,
             sender: ContractAddress,
             open_deadline: u64,
             fill_deadline: u64,

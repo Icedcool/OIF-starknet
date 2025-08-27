@@ -1,21 +1,15 @@
 # OIF-starknet
 
-Extension of BootNodeDev's [Open Intent Framework](https://github.com/BootNodeDev/intents-framework/tree/main) to add Starknet support.
+Extension of BootNodeDev's [Open Intent Framework](https://github.com/BootNodeDev/intents-framework/tree/main) for adding Starknet support.
 
-## Run Contract Tests
+## Solidity Contracts
 
-### Solidity
+- `solidity`: Copy of [Open Intent Framework](https://github.com/BootNodeDev/intents-framework/tree/main) Solidity contracts.
 
-```bash
-yarn install
-```
+## Cairo Contracts
 
-```bash
-yarn test
-```
+- `cairo`: Starknet translation of Solidity contracts.
 
-### Cairo
+## Go
 
-```bash
-scarb test
-```
+- `go`: Hyperlane intent solver.

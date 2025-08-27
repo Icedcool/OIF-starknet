@@ -25,7 +25,7 @@ pub mod BasicSwap7683Component {
 
     /// ERRORS ///
     pub mod Errors {
-        pub fn INVALID_ORDER_TYPE(order_type: felt252) {
+        pub fn INVALID_ORDER_TYPE(order_type: u256) {
             panic!("Invalid order type: {order_type}");
         }
 
@@ -229,7 +229,7 @@ pub mod BasicSwap7683Component {
             }
 
             let open_order_details: Bytes = base7683_component.open_orders.entry(order_id).read();
-            let (_, order_data): (felt252, Bytes) = open_order_details.decode();
+            let (_, order_data): (u256, Bytes) = open_order_details.decode();
 
             order = OrderEncoder::decode(@order_data);
 
@@ -272,7 +272,7 @@ pub mod BasicSwap7683Component {
         /// - The order nonce.
         fn _resolved_order(
             self: @Base7683Component::ComponentState<TContractState>,
-            order_data_type: felt252,
+            order_data_type: u256,
             sender: ContractAddress,
             open_deadline: u64,
             fill_deadline: u64,
@@ -345,7 +345,7 @@ pub mod BasicSwap7683Component {
         ///
         /// Returns: The computed order ID.
         fn _get_order_id(
-            self: @ComponentState<TContractState>, order_data_type: felt252, order_data: Bytes,
+            self: @ComponentState<TContractState>, order_data_type: u256, order_data: Bytes,
         ) -> u256 {
             if (order_data_type != OrderEncoder::ORDER_DATA_TYPE_HASH) {
                 Errors::INVALID_ORDER_TYPE(order_data_type);

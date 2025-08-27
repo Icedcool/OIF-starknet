@@ -41,7 +41,7 @@ func GetChainID(rpcURL string) (*big.Int, error) {
 		return nil, fmt.Errorf("failed to dial RPC: %w", err)
 	}
 	defer client.Close()
-	
+
 	return client.ChainID(context.Background())
 }
 
@@ -52,7 +52,7 @@ func GetBlockNumber(rpcURL string) (uint64, error) {
 		return 0, fmt.Errorf("failed to dial RPC: %w", err)
 	}
 	defer client.Close()
-	
+
 	return client.BlockNumber(context.Background())
 }
 
@@ -137,7 +137,7 @@ func ERC20Transfer(client *ethclient.Client, auth *bind.TransactOpts, tokenAddre
 		nonce,
 		tokenAddress,
 		big.NewInt(0), // No ETH value
-		100000,         // Gas limit
+		100000,        // Gas limit
 		gasPrice,
 		data,
 	)
@@ -186,7 +186,7 @@ func ERC20Approve(client *ethclient.Client, auth *bind.TransactOpts, tokenAddres
 		nonce,
 		tokenAddress,
 		big.NewInt(0), // No ETH value
-		200000,         // Gas limit
+		200000,        // Gas limit
 		gasPrice,
 		data,
 	)
@@ -232,6 +232,6 @@ func ParsePrivateKey(privateKeyHex string) (*ecdsa.PrivateKey, error) {
 	if len(privateKeyHex) >= 2 && privateKeyHex[:2] == "0x" {
 		privateKeyHex = privateKeyHex[2:]
 	}
-	
+
 	return crypto.HexToECDSA(privateKeyHex)
 }

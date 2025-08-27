@@ -356,14 +356,14 @@ fn test_open_fill_settle() {
 
     assert_eq!(setup.destination_router.order_status(order_id), setup.destination_router.FILLED());
     assert_eq!(
-        *balances_after_settle[_balance_id(setup.veg.account.contract_address, setup.clone())],
-        *balances_before_settle[_balance_id(setup.veg.account.contract_address, setup.clone())]
-            + setup.amount,
-    );
-    assert_eq!(
         *balances_after_settle[_balance_id(setup.origin_router.contract_address, setup.clone())],
         *balances_before_settle[_balance_id(setup.origin_router.contract_address, setup.clone())]
             - setup.amount,
+    );
+    assert_eq!(
+        *balances_after_settle[_balance_id(setup.veg.account.contract_address, setup.clone())],
+        *balances_before_settle[_balance_id(setup.veg.account.contract_address, setup.clone())]
+            + setup.amount,
     );
 }
 
@@ -550,14 +550,14 @@ fn test_open_for_fill_settle() {
 
     assert_eq!(setup.destination_router.order_status(order_id), setup.destination_router.FILLED());
     assert_eq!(
-        *balances_after_settle[_balance_id(setup.veg.account.contract_address, setup.clone())],
-        *balances_before_settle[_balance_id(setup.veg.account.contract_address, setup.clone())]
-            + setup.amount,
-    );
-    assert_eq!(
         *balances_after_settle[_balance_id(setup.origin_router.contract_address, setup.clone())],
         *balances_before_settle[_balance_id(setup.origin_router.contract_address, setup.clone())]
             - setup.amount,
+    );
+    assert_eq!(
+        *balances_after_settle[_balance_id(setup.veg.account.contract_address, setup.clone())],
+        *balances_before_settle[_balance_id(setup.veg.account.contract_address, setup.clone())]
+            + setup.amount,
     );
 }
 

@@ -3,10 +3,10 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
-	"github.com/spf13/viper"
 )
 
 // SolverConfig represents configuration for a single solver
@@ -17,9 +17,9 @@ type SolverConfig struct {
 // Config holds all configuration
 type Config struct {
 	Solvers    map[string]SolverConfig `json:"solvers"`
-	PrivateKey string                  `json:"privateKey"`
 	LogLevel   string                  `json:"logLevel"`
 	LogFormat  string                  `json:"logFormat"`
+	MaxRetries int                     `json:"maxRetries"`
 }
 
 // Default solver configurations
@@ -29,54 +29,58 @@ var defaultSolvers = map[string]SolverConfig{
 	},
 }
 
-// LoadConfig loads configuration from environment variables and config files
+// LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	// Load .env file first
 	if err := godotenv.Load(); err != nil {
 		// Don't fail if .env doesn't exist, just log a warning
 		fmt.Printf("Warning: .env file not found: %v\n", err)
 	}
-	
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./config")
-	
-	// Set defaults
-	viper.SetDefault("solvers", defaultSolvers)
-	viper.SetDefault("logLevel", "info")
-	viper.SetDefault("logFormat", "text")
-	
-	// Environment variables
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	
-	// Load config file if it exists
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+
+	// Create config with defaults
+	config := &Config{
+		Solvers:    make(map[string]SolverConfig),
+		LogLevel:   "info",
+		LogFormat:  "text",
+		MaxRetries: 5,
+	}
+
+	// Copy default solvers
+	for name, solver := range defaultSolvers {
+		config.Solvers[name] = solver
+	}
+
+	// Override with environment variables
+	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
+		config.LogLevel = logLevel
+	}
+
+	if logFormat := os.Getenv("LOG_FORMAT"); logFormat != "" {
+		config.LogFormat = logFormat
+	}
+
+	if mr := os.Getenv("MAX_RETRIES"); mr != "" {
+		if n, err := strconv.Atoi(mr); err == nil {
+			config.MaxRetries = n
 		}
 	}
-	
-	// Override with environment variables
-	if privateKey := os.Getenv("PRIVATE_KEY"); privateKey != "" {
-		viper.Set("privateKey", privateKey)
+
+	// Allow environment variable override for solver enable/disable
+	// Format: SOLVER_HYPERLANE7683_ENABLED=true/false
+	for solverName := range config.Solvers {
+		envKey := fmt.Sprintf("SOLVER_%s_ENABLED", strings.ToUpper(solverName))
+		if enabled := os.Getenv(envKey); enabled != "" {
+			solver := config.Solvers[solverName]
+			if enabled == "true" {
+				solver.Enabled = true
+			} else if enabled == "false" {
+				solver.Enabled = false
+			}
+			config.Solvers[solverName] = solver
+		}
 	}
-	
-	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
-		viper.Set("logLevel", logLevel)
-	}
-	
-	if logFormat := os.Getenv("LOG_FORMAT"); logFormat != "" {
-		viper.Set("logFormat", logFormat)
-	}
-	
-	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-	
-	return &config, nil
+
+	return config, nil
 }
 
 // IsSolverEnabled checks if a solver is enabled
@@ -86,20 +90,4 @@ func (c *Config) IsSolverEnabled(solverName string) bool {
 		return false
 	}
 	return solver.Enabled
-}
-
-// GetStarknetConfig returns Starknet-specific configuration
-func (c *Config) GetStarknetConfig() (string, string, error) {
-	rpcURL := os.Getenv("STARKNET_LOCAL_RPC_URL")
-	privateKey := os.Getenv("STARKNET_LOCAL_PRIVATE_KEY")
-	
-	if rpcURL == "" {
-		return "", "", fmt.Errorf("STARKNET_LOCAL_RPC_URL not set")
-	}
-	
-	if privateKey == "" {
-		return "", "", fmt.Errorf("STARKNET_LOCAL_PRIVATE_KEY not set")
-	}
-	
-	return rpcURL, privateKey, nil
 }

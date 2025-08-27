@@ -8,7 +8,8 @@ import (
 )
 
 // EventHandler is a function that processes parsed event arguments
-type EventHandler func(args types.ParsedArgs, originChainName string, blockNumber uint64) error
+// Returns (settled, error) where settled=true means the order was fully settled
+type EventHandler func(args types.ParsedArgs, originChainName string, blockNumber uint64) (bool, error)
 
 // ShutdownFunc is a function that stops the listener
 type ShutdownFunc func()
@@ -47,9 +48,8 @@ func NewListenerConfig(
 	if pollInterval == 0 {
 		pollInterval = 3000 // default 3 seconds
 	}
-	if confirmationBlocks == 0 {
-		confirmationBlocks = 12 // default 12 blocks
-	}
+	// IMPORTANT: Respect explicit 0 confirmations (disable confirmations)
+	// Do not override confirmationBlocks when it's 0.
 	if maxBlockRange == 0 {
 		maxBlockRange = 500 // default 500 blocks
 	}

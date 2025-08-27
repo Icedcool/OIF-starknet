@@ -28,8 +28,7 @@ use snforge_std::signature::stark_curve::{
 };
 use starknet::ContractAddress;
 use crate::common::{
-    deploy_eth, deal_multiple, ETH_ADDRESS, Account, deploy_permit2, deploy_erc20,
-generate_account,
+    deploy_eth, deal_multiple, ETH_ADDRESS, Account, deploy_permit2, deploy_erc20, generate_account,
 };
 use crate::mocks::mock_base7683::{IMockBase7683Dispatcher};
 use crate::mocks::mock_basic_swap7683::{IMockBasicSwap7683Dispatcher};
@@ -175,7 +174,7 @@ pub fn setup() -> Setup {
 }
 
 pub fn _prepare_onchain_order(
-    order_data: Bytes, fill_deadline: u64, order_data_type: felt252,
+    order_data: Bytes, fill_deadline: u64, order_data_type: u256,
 ) -> OnchainCrossChainOrder {
     OnchainCrossChainOrder { order_data, fill_deadline, order_data_type }
 }
@@ -188,7 +187,7 @@ pub fn _prepare_gasless_order(
     nonce: felt252,
     open_deadline: u64,
     fill_deadline: u64,
-    order_data_type: felt252,
+    order_data_type: u256,
 ) -> GaslessCrossChainOrder {
     GaslessCrossChainOrder {
         origin_settler,
@@ -350,7 +349,7 @@ pub fn _assert_resolved_order(
 
 
 pub fn _order_data_by_id(order_id: u256, setup: Setup) -> Bytes {
-    let (_, order_data): (felt252, @Bytes) = setup.base_full.open_orders(order_id).decode();
+    let (_, order_data): (u256, @Bytes) = setup.base_full.open_orders(order_id).decode();
 
     order_data.clone()
 }

@@ -2,49 +2,47 @@ package types
 
 import (
 	"math/big"
-
-	"github.com/ethereum/go-ethereum/common"
 )
 
 // ParsedArgs represents the parsed arguments from an Open event
 type ParsedArgs struct {
-	OrderID        string   `json:"orderId"`
-	SenderAddress  string   `json:"senderAddress"`
-	Recipients     []Recipient `json:"recipients"`
-	ResolvedOrder  ResolvedCrossChainOrder `json:"resolvedOrder"`
+	OrderID       string                  `json:"orderId"`
+	SenderAddress string                  `json:"senderAddress"`
+	Recipients    []Recipient             `json:"recipients"`
+	ResolvedOrder ResolvedCrossChainOrder `json:"resolvedOrder"`
 }
 
 // Recipient represents a destination recipient
 type Recipient struct {
 	DestinationChainName string `json:"destinationChainName"`
-	RecipientAddress    string `json:"recipientAddress"`
+	RecipientAddress     string `json:"recipientAddress"`
 }
 
 // Output represents tokens that must be received for a valid order fulfillment
 type Output struct {
-	Token     common.Address `json:"token"`     // ERC20 token address (address for cross-chain compatibility)
-	Amount    *big.Int       `json:"amount"`    // Amount of tokens
-	Recipient common.Address `json:"recipient"` // Address to receive tokens
-	ChainID   *big.Int       `json:"chainId"`   // Destination chain ID
+	Token     string   `json:"token"`     // Token address as string (preserves original format)
+	Amount    *big.Int `json:"amount"`    // Amount of tokens
+	Recipient string   `json:"recipient"` // Recipient address as string (preserves original format)
+	ChainID   *big.Int `json:"chainId"`   // Destination chain ID
 }
 
 // FillInstruction represents instructions to parameterize each leg of the fill
 type FillInstruction struct {
-	DestinationChainID *big.Int      `json:"destinationChainId"` // Chain to fill on
-	DestinationSettler common.Address `json:"destinationSettler"` // Contract address to fill on
-	OriginData         []byte        `json:"originData"`         // Data needed by destinationSettler
+	DestinationChainID *big.Int `json:"destinationChainId"` // Chain to fill on
+	DestinationSettler string   `json:"destinationSettler"` // Contract address as string (preserves original format)
+	OriginData         []byte   `json:"originData"`         // Data needed by destinationSettler
 }
 
 // ResolvedCrossChainOrder contains the order details
 type ResolvedCrossChainOrder struct {
-	User             common.Address      `json:"user"`             // User initiating the transfer
-	OriginChainID    *big.Int           `json:"originChainId"`    // Origin chain ID
-	OpenDeadline     uint32             `json:"openDeadline"`     // Timestamp by which order must be opened
-	FillDeadline     uint32             `json:"fillDeadline"`     // Timestamp by which order must be filled
-	OrderID          [32]byte           `json:"orderId"`          // Unique order identifier
-	MaxSpent         []Output           `json:"maxSpent"`         // Max outputs filler will send
-	MinReceived      []Output           `json:"minReceived"`      // Min outputs filler must receive
-	FillInstructions []FillInstruction  `json:"fillInstructions"` // Instructions for each fill leg
+	User             string    `json:"user"`             // User initiating the transfer
+	OriginChainID    *big.Int          `json:"originChainId"`    // Origin chain ID
+	OpenDeadline     uint32            `json:"openDeadline"`     // Timestamp by which order must be opened
+	FillDeadline     uint32            `json:"fillDeadline"`     // Timestamp by which order must be filled
+	OrderID          [32]byte          `json:"orderId"`          // Unique order identifier
+	MaxSpent         []Output          `json:"maxSpent"`         // Max outputs filler will send
+	MinReceived      []Output          `json:"minReceived"`      // Min outputs filler must receive
+	FillInstructions []FillInstruction `json:"fillInstructions"` // Instructions for each leg
 }
 
 // IntentData contains the data needed to fill an intent
@@ -77,12 +75,12 @@ type Hyperlane7683Metadata struct {
 
 // IntentSource represents a contract to monitor for events
 type IntentSource struct {
-	Address         string   `json:"address"`
-	ChainName       string   `json:"chainName"`
-	InitialBlock    *big.Int `json:"initialBlock,omitempty"`
-	PollInterval    int      `json:"pollInterval,omitempty"`
-	ConfirmationBlocks int   `json:"confirmationBlocks,omitempty"`
-	ProcessedIDs    []string `json:"processedIds,omitempty"`
+	Address            string   `json:"address"`
+	ChainName          string   `json:"chainName"`
+	InitialBlock       *big.Int `json:"initialBlock,omitempty"`
+	PollInterval       int      `json:"pollInterval,omitempty"`
+	ConfirmationBlocks int      `json:"confirmationBlocks,omitempty"`
+	ProcessedIDs       []string `json:"processedIds,omitempty"`
 }
 
 // CustomRules contains configuration for custom rules
@@ -98,9 +96,9 @@ type RuleConfig struct {
 
 // AllowBlockListItem represents a single allow/block list item
 type AllowBlockListItem struct {
-	SenderAddress      string   `json:"senderAddress"`
-	DestinationDomain  string   `json:"destinationDomain"`
-	RecipientAddress   string   `json:"recipientAddress"`
+	SenderAddress     string `json:"senderAddress"`
+	DestinationDomain string `json:"destinationDomain"`
+	RecipientAddress  string `json:"recipientAddress"`
 }
 
 // AllowBlockLists contains allow and block lists

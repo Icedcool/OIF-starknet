@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 	"strings"
 
+	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/oif-starknet/go/internal/filler"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
+	"github.com/NethermindEth/starknet.go/rpc"
+	"github.com/NethermindEth/starknet.go/utils"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -30,25 +34,33 @@ func (f *Hyperlane7683Filler) enoughBalanceOnDestination(args types.ParsedArgs, 
 		
 		// Check if this is a Starknet chain using dynamic detection
 		if f.isStarknetChain(output.ChainID) {
-			// For Starknet, skip balance validation for now
-			// TODO: Implement proper Starknet RPC balance checking
-			fmt.Printf("   ⚠️  Skipping Starknet balance check for chain %d (not implemented yet)\n", chainID)
+			// For Starknet, implement balance validation using Starknet RPC
+			if err := f.validateStarknetBalance(output); err != nil {
+				return fmt.Errorf("Starknet balance validation failed: %w", err)
+			}
 			continue
 		}
 		
 		// Handle EVM chains normally
 		tokenAddr := output.Token
 
+		// Convert string address to EVM address for map operations
+		converter := types.NewAddressConverter()
+		tokenAddrEVM, err := converter.ToEVMAddress(tokenAddr)
+		if err != nil {
+			return fmt.Errorf("failed to convert token address %s to EVM format: %w", tokenAddr, err)
+		}
+
 		if amountByTokenByChain[chainID] == nil {
 			amountByTokenByChain[chainID] = make(map[common.Address]*big.Int)
 		}
 
-		if amountByTokenByChain[chainID][tokenAddr] == nil {
-			amountByTokenByChain[chainID][tokenAddr] = big.NewInt(0)
+		if amountByTokenByChain[chainID][tokenAddrEVM] == nil {
+			amountByTokenByChain[chainID][tokenAddrEVM] = big.NewInt(0)
 		}
 
-		amountByTokenByChain[chainID][tokenAddr].Add(
-			amountByTokenByChain[chainID][tokenAddr],
+		amountByTokenByChain[chainID][tokenAddrEVM].Add(
+			amountByTokenByChain[chainID][tokenAddrEVM],
 			output.Amount,
 		)
 	}
@@ -85,6 +97,98 @@ func (f *Hyperlane7683Filler) enoughBalanceOnDestination(args types.ParsedArgs, 
 
 	fmt.Printf("   ✅ All token balance validations passed\n")
 	return nil
+}
+
+// validateStarknetBalance checks if the filler has sufficient token balance on Starknet
+func (f *Hyperlane7683Filler) validateStarknetBalance(output types.Output) error {
+	// Get Starknet network config
+	chainConfig, err := f.getNetworkConfigByChainID(output.ChainID)
+	if err != nil {
+		return fmt.Errorf("failed to get Starknet network config: %w", err)
+	}
+	
+	// Convert token address to Starknet format
+	tokenAddressHex := f.getStarknetTokenAddress(output)
+	
+	// Get Starknet solver address from environment
+	starknetSolverAddr := os.Getenv("STARKNET_SOLVER_ADDRESS")
+	if starknetSolverAddr == "" {
+		return fmt.Errorf("STARKNET_SOLVER_ADDRESS environment variable not set")
+	}
+	
+	// Check token balance on Starknet using direct RPC call
+	balance, err := f.getStarknetTokenBalance(chainConfig.RPCURL, tokenAddressHex, starknetSolverAddr)
+	if err != nil {
+		return fmt.Errorf("failed to get Starknet token balance: %w", err)
+	}
+	
+	// Compare balance with required amount
+	if balance.Cmp(output.Amount) < 0 {
+		return fmt.Errorf("insufficient Starknet balance for token %s: have %s, need %s",
+			tokenAddressHex, balance.String(), output.Amount.String())
+	}
+	
+	fmt.Printf("   ✅ Starknet Chain %d Token %s: Balance %s >= Required %s\n",
+		output.ChainID.Uint64(), tokenAddressHex, balance.String(), output.Amount.String())
+	
+	return nil
+}
+
+// getStarknetTokenBalance retrieves token balance directly using RPC (without full StarknetFiller)
+func (f *Hyperlane7683Filler) getStarknetTokenBalance(rpcURL, tokenAddressHex, holderAddressHex string) (*big.Int, error) {
+	// Create a minimal provider just for balance checking
+	provider, err := rpc.NewProvider(rpcURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Starknet provider: %w", err)
+	}
+	
+	// Convert addresses to felt format
+	tokenAddr, err := utils.HexToFelt(tokenAddressHex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid token address: %w", err)
+	}
+	
+	holderAddr, err := utils.HexToFelt(holderAddressHex)
+	if err != nil {
+		return nil, fmt.Errorf("invalid holder address: %w", err)
+	}
+	
+	// Call balanceOf function on the ERC20 contract
+	// balanceOf(address) -> uint256
+	// Starknet uses function name selectors, not hardcoded hex
+	balanceOfSelector := utils.GetSelectorFromNameFelt("balanceOf")
+	
+	call := rpc.FunctionCall{
+		ContractAddress:    tokenAddr,
+		EntryPointSelector: balanceOfSelector,
+		Calldata:           []*felt.Felt{holderAddr},
+	}
+	
+	result, err := provider.Call(context.Background(), call, rpc.BlockID{Tag: "latest"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to call balanceOf: %w", err)
+	}
+	
+	if len(result) == 0 {
+		return nil, fmt.Errorf("balanceOf returned no results")
+	}
+	
+	// Convert felt result to big.Int
+	balance := utils.FeltToBigInt(result[0])
+	return balance, nil
+}
+
+// getStarknetTokenAddress converts EVM token address to Starknet format
+func (f *Hyperlane7683Filler) getStarknetTokenAddress(output types.Output) string {
+	// For Starknet destinations, use the token address directly
+	if f.isStarknetChain(output.ChainID) {
+		fmt.Printf("   🎯 Using Starknet token address: %s\n", output.Token)
+		return output.Token
+	}
+	
+	// For EVM destinations, convert to Starknet format if needed
+	fmt.Printf("   ⚠️  Using token address as-is: %s\n", output.Token)
+	return output.Token
 }
 
 // FilterByTokenAndAmount validates that tokens and amounts are within allowed limits

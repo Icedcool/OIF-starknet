@@ -41,11 +41,6 @@ func NewSolverManager(client *ethclient.Client) *SolverManager {
 			Enabled: true,
 			Options: map[string]interface{}{},
 		},
-		// Future solvers would be added here:
-		// "eco": {
-		//     Enabled: false,
-		//     Options: map[string]interface{}{},
-		// },
 	}
 
 	return &SolverManager{
@@ -100,7 +95,7 @@ func (sm *SolverManager) initializeHyperlane7683(ctx context.Context) error {
 	}
 
 	// Start listeners for each intent source
-	for _, source := range []string{"Base Sepolia", "Optimism Sepolia", "Arbitrum Sepolia", "Sepolia", "Starknet Sepolia"} {
+	for _, source := range []string{"Base", "Optimism", "Arbitrum", "Ethereum", "Starknet"} {
 		networkConfig, exists := config.Networks[source]
 		if !exists {
 			fmt.Printf("   ⚠️  Network %s not found in config, skipping...\n", source)
@@ -110,7 +105,7 @@ func (sm *SolverManager) initializeHyperlane7683(ctx context.Context) error {
 		var shutdown listener.ShutdownFunc
 
 		// Create appropriate listener based on chain type
-		if source == "Starknet Sepolia" {
+		if source == "Starknet" {
 			hyperlaneAddr, err := getStarknetHyperlaneAddress(networkConfig)
 			if err != nil {
 				return fmt.Errorf("failed to get Starknet Hyperlane address: %w", err)
@@ -212,7 +207,8 @@ func (sm *SolverManager) GetSolverStatus() map[string]bool {
 // getStarknetHyperlaneAddress gets the correct Starknet Hyperlane address based on FORKING mode
 func getStarknetHyperlaneAddress(networkConfig config.NetworkConfig) (string, error) {
 	// Check FORKING environment variable (default: true for local forks)
-	forkingStr := strings.ToLower(getEnvWithDefault("FORKING", "true"))
+	forkingStr := strings.ToLower(os.Getenv("FORKING"))
+	if forkingStr == "" { forkingStr = "true" }
 	isForking, _ := strconv.ParseBool(forkingStr)
 
 	if isForking {
@@ -237,18 +233,10 @@ func getStarknetHyperlaneAddress(networkConfig config.NetworkConfig) (string, er
 
 // getStarknetHyperlaneFromDeploymentState loads Starknet Hyperlane address from deployment state
 func getStarknetHyperlaneFromDeploymentState() string {
-	paths := []string{
-		"state/network_state/deployment-state.json",
-		"../state/network_state/deployment-state.json",
-		"../../state/network_state/deployment-state.json",
-	}
-
+	paths := []string{"state/network_state/deployment-state.json", "../state/network_state/deployment-state.json", "../../state/network_state/deployment-state.json"}
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
+		if err != nil { continue }
 		var deploymentState struct {
 			Networks map[string]struct {
 				ChainID          uint64 `json:"chainId"`
@@ -257,25 +245,9 @@ func getStarknetHyperlaneFromDeploymentState() string {
 				DogCoinAddress   string `json:"dogCoinAddress"`
 			} `json:"networks"`
 		}
-
-		if err := json.Unmarshal(data, &deploymentState); err != nil {
-			continue
-		}
-
-		if starknet, exists := deploymentState.Networks["Starknet Sepolia"]; exists {
-			if starknet.HyperlaneAddress != "" {
-				return starknet.HyperlaneAddress
-			}
-		}
+		if err := json.Unmarshal(data, &deploymentState); err != nil { continue }
+		if stark, ok := deploymentState.Networks["Starknet"]; ok && stark.HyperlaneAddress != "" { return stark.HyperlaneAddress }
+		if starkLegacy, ok := deploymentState.Networks["Starknet"]; ok && starkLegacy.HyperlaneAddress != "" { return starkLegacy.HyperlaneAddress }
 	}
-
-	return "" // Not found
-}
-
-// getEnvWithDefault gets an environment variable with a default fallback
-func getEnvWithDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
+	return ""
 }

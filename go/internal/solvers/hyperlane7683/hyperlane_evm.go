@@ -1,11 +1,16 @@
 package hyperlane7683
 
+// Module: EVM chain handler for Hyperlane7683
+// - Executes fill/settle/status calls against EVM Hyperlane7683 contracts
+// - Manages ERC20 approvals and gas/value handling for calls
+
 import (
 	"context"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
 	contracts "github.com/NethermindEth/oif-starknet/go/internal/contracts"
@@ -23,6 +28,7 @@ import (
 type HyperlaneEVM struct {
 	client *ethclient.Client
 	signer *bind.TransactOpts
+	mu     sync.Mutex // Serialize operations to prevent nonce conflicts
 }
 
 // NewHyperlaneEVM creates a new EVM handler for Hyperlane operations
@@ -35,6 +41,9 @@ func NewHyperlaneEVM(client *ethclient.Client, signer *bind.TransactOpts) *Hyper
 
 // Fill executes a fill operation on an EVM chain
 func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs, originChainName string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
 	if len(args.ResolvedOrder.FillInstructions) == 0 {
 		return fmt.Errorf("no fill instructions found")
 	}
@@ -42,29 +51,51 @@ func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs, originCh
 	instruction := args.ResolvedOrder.FillInstructions[0]
 	fmt.Printf("🔵 EVM Fill: %s on chain %s\n", args.OrderID, instruction.DestinationChainID.String())
 	
-	// Derive orderId from keccak(origin_data) for EVM legs
+	// Use the actual order ID from the event, not derived from origin_data
 	var orderIdArr [32]byte
-	orderHash := crypto.Keccak256(instruction.OriginData)
-	copy(orderIdArr[:], orderHash)
+	if args.OrderID != "" {
+		// Parse the order ID from the event
+		orderIDBytes := common.FromHex(args.OrderID)
+		copy(orderIdArr[:], orderIDBytes)
+		fmt.Printf("   🎯 Using order ID from event: %s\n", args.OrderID)
+	} else {
+		// Fallback to derived order ID only if event order ID is missing
+		orderHash := crypto.Keccak256(instruction.OriginData)
+		copy(orderIdArr[:], orderHash)
+		fmt.Printf("   ⚠️  Using fallback order ID (keccak(origin_data)): 0x%s\n", hex.EncodeToString(orderIdArr[:]))
+	}
+
+	// Convert destination settler string to EVM address for contract operations
+	converter := types.NewAddressConverter()
+	destinationSettlerAddr, err := converter.ToEVMAddress(instruction.DestinationSettler)
+	if err != nil {
+		return fmt.Errorf("failed to convert destination settler to EVM address: %w", err)
+	}
 
 	// Pre-check: skip if order status != 0 (already processed)
-	if processed, err := h.isOrderAlreadyProcessed(ctx, orderIdArr, instruction.DestinationSettler); err == nil && processed {
+	if processed, err := h.isOrderAlreadyProcessed(ctx, orderIdArr, destinationSettlerAddr); err == nil && processed {
 		fmt.Printf("   ⏭️  Skipping EVM fill: order already processed\n")
 		return nil
 	}
 
-	// Get the contract instance
-	contract, err := contracts.NewHyperlane7683(instruction.DestinationSettler, h.client)
+	// Get the contract instance using the EVM address
+	contract, err := contracts.NewHyperlane7683(destinationSettlerAddr, h.client)
 	if err != nil {
-		return fmt.Errorf("failed to bind contract at %s: %w", instruction.DestinationSettler.Hex(), err)
+		return fmt.Errorf("failed to bind contract at %s: %w", instruction.DestinationSettler, err)
 	}
 
 	// Handle max spent approvals if needed  
 	if len(args.ResolvedOrder.MaxSpent) > 0 {
 		maxSpent := args.ResolvedOrder.MaxSpent[0]
-		if maxSpent.Token != (common.Address{}) {
-			if err := h.ensureERC20Approval(ctx, maxSpent.Token, instruction.DestinationSettler, maxSpent.Amount); err != nil {
-				return fmt.Errorf("approval failed for token %s: %w", maxSpent.Token.Hex(), err)
+		if maxSpent.Token != "" {
+			// Convert token address string to EVM address for approval
+			tokenAddr, err := converter.ToEVMAddress(maxSpent.Token)
+			if err != nil {
+				return fmt.Errorf("failed to convert token address for approval: %w", err)
+			}
+			
+			if err := h.ensureERC20Approval(ctx, tokenAddr, destinationSettlerAddr, maxSpent.Amount); err != nil {
+				return fmt.Errorf("approval failed for token %s: %w", maxSpent.Token, err)
 			}
 		}
 	}
@@ -74,12 +105,12 @@ func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs, originCh
 
 	// Set native token value if needed
 	originalValue := h.signer.Value
-	if len(args.ResolvedOrder.MaxSpent) > 0 && args.ResolvedOrder.MaxSpent[0].Token == (common.Address{}) {
+	if len(args.ResolvedOrder.MaxSpent) > 0 && args.ResolvedOrder.MaxSpent[0].Token == "" {
 		h.signer.Value = new(big.Int).Set(args.ResolvedOrder.MaxSpent[0].Amount)
 	}
 	defer func() { h.signer.Value = originalValue }()
 
-	fmt.Printf("   🔄 Executing fill call to contract %s\n", instruction.DestinationSettler.Hex())
+	fmt.Printf("   🔄 Executing fill call to contract %s\n", instruction.DestinationSettler)
 	
 	// Execute the fill transaction
 	tx, err := contract.Fill(h.signer, orderIdArr, instruction.OriginData, fillerDataBytes)
@@ -105,6 +136,9 @@ func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs, originCh
 
 // Settle executes settlement on an EVM chain
 func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
 	if len(args.ResolvedOrder.FillInstructions) == 0 {
 		return fmt.Errorf("no fill instructions found")
 	}
@@ -112,7 +146,14 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 	instruction := args.ResolvedOrder.FillInstructions[0]
 	destinationSettler := instruction.DestinationSettler
 	
-	fmt.Printf("🔵 EVM Settle: %s on settler %s\n", args.OrderID, destinationSettler.Hex())
+	fmt.Printf("🔵 EVM Settle: %s on settler %s\n", args.OrderID, destinationSettler)
+	
+	// Convert destination settler string to EVM address for contract operations
+	converter := types.NewAddressConverter()
+	destinationSettlerAddr, err := converter.ToEVMAddress(destinationSettler)
+	if err != nil {
+		return fmt.Errorf("failed to convert destination settler to EVM address: %w", err)
+	}
 	
 	// Prepare order ID
 	var orderIdArr [32]byte
@@ -133,10 +174,10 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 		fmt.Printf("   ℹ️  Using fallback orderId (keccak(origin_data)): 0x%s\n", hex.EncodeToString(orderIdArr[:]))
 	}
 
-	// Bind to the destination settler contract
-	dest, err := contracts.NewHyperlane7683(destinationSettler, h.client)
+	// Get the contract instance using the EVM address
+	contract, err := contracts.NewHyperlane7683(destinationSettlerAddr, h.client)
 	if err != nil {
-		return fmt.Errorf("failed to bind to destination settler contract: %w", err)
+		return fmt.Errorf("failed to bind contract at %s: %w", destinationSettler, err)
 	}
 
 	// Get gas payment (protocol fee) that must be sent with settlement
@@ -146,9 +187,9 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 		return fmt.Errorf("failed to get origin domain: %w", err)
 	}
 	fmt.Printf("   🔍 Using origin domain for gas quote: %d\n", originDomain)
-	gasPayment, err := dest.QuoteGasPayment(&bind.CallOpts{Context: ctx}, originDomain)
+	gasPayment, err := contract.QuoteGasPayment(&bind.CallOpts{Context: ctx}, originDomain)
 	if err != nil {
-		return fmt.Errorf("quoteGasPayment failed on %s: %w", destinationSettler.Hex(), err)
+		return fmt.Errorf("quoteGasPayment failed on %s: %w", destinationSettler, err)
 	}
 	fmt.Printf("   💰 Gas payment quoted: %s wei\n", gasPayment.String())
 
@@ -158,7 +199,7 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 	defer func() { h.signer.Value = originalValue }()
 
 	// Pre-settle check: ensure order is FILLED
-	if err := h.verifyOrderStatus(ctx, orderIdArr, destinationSettler, "FILLED"); err != nil {
+	if err := h.verifyOrderStatus(ctx, orderIdArr, destinationSettlerAddr, "FILLED"); err != nil {
 		return fmt.Errorf("pre-settle check failed: %w", err)
 	}
 
@@ -176,19 +217,19 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 	fmt.Printf("   🚀 Sending settle transaction with value %s wei...\n", h.signer.Value.String())
 	
 	// Execute the settle transaction with protocol fee payment
-	tx, err := dest.Settle(h.signer, orderIDs)
+	tx, err := contract.Settle(h.signer, orderIDs)
 	if err != nil {
-		return fmt.Errorf("settle tx failed on %s: %w", destinationSettler.Hex(), err)
+		return fmt.Errorf("settle tx failed on %s: %w", destinationSettler, err)
 	}
 	fmt.Printf("   📊 Settle transaction sent: %s\n", tx.Hash().Hex())
 	
 	receipt, err := bind.WaitMined(ctx, h.client, tx)
 	if err != nil {
-		return fmt.Errorf("waiting settle failed on %s: %w", destinationSettler.Hex(), err)
+		return fmt.Errorf("waiting settle failed on %s: %w", destinationSettler, err)
 	}
 	
 	if receipt.Status == 0 {
-		return fmt.Errorf("settle transaction failed on %s at block %d", destinationSettler.Hex(), receipt.BlockNumber)
+		return fmt.Errorf("settle transaction failed on %s at block %d", destinationSettler, receipt.BlockNumber)
 	}
 	
 	fmt.Printf("   ✅ Settle transaction confirmed at block %d (gasUsed=%d)\n", receipt.BlockNumber, receipt.GasUsed)
@@ -220,8 +261,15 @@ func (h *HyperlaneEVM) GetOrderStatus(ctx context.Context, args types.ParsedArgs
 		return "UNKNOWN", fmt.Errorf("failed to pack orderStatus: %w", err)
 	}
 
+	// Convert destination settler string to EVM address for contract call
+	converter := types.NewAddressConverter()
+	destinationSettlerAddr, err := converter.ToEVMAddress(instruction.DestinationSettler)
+	if err != nil {
+		return "UNKNOWN", fmt.Errorf("failed to convert destination settler to EVM address: %w", err)
+	}
+	
 	dummyFrom := common.HexToAddress("0x1000000000000000000000000000000000000000")
-	res, err := h.client.CallContract(ctx, ethereum.CallMsg{From: dummyFrom, To: &instruction.DestinationSettler, Data: callData}, nil)
+	res, err := h.client.CallContract(ctx, ethereum.CallMsg{From: dummyFrom, To: &destinationSettlerAddr, Data: callData}, nil)
 	if err != nil {
 		return "UNKNOWN", fmt.Errorf("orderStatus call failed: %w", err)
 	}
@@ -231,7 +279,7 @@ func (h *HyperlaneEVM) GetOrderStatus(ctx context.Context, args types.ParsedArgs
 	}
 
 	statusHash := common.BytesToHash(res[:32])
-	return h.interpretStatusHash(ctx, statusHash, instruction.DestinationSettler), nil
+	return h.interpretStatusHash(ctx, statusHash, destinationSettlerAddr), nil
 }
 
 // Helper methods

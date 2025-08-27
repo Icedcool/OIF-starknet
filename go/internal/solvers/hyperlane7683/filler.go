@@ -1,5 +1,10 @@
 package hyperlane7683
 
+// Module: Filler orchestrator for Hyperlane7683
+// - Applies core and custom rules to ParsedArgs
+// - Routes to chain-specific handlers (EVM/Starknet) for fill and settle
+// - Provides simple chain detection and client/signer acquisition
+
 import (
 	"context"
 	"fmt"
@@ -45,16 +50,11 @@ func NewHyperlane7683Filler(client *ethclient.Client) *Hyperlane7683Filler {
 		metadata:       metadata,
 	}
 
-	// Initialize protocol handlers with placeholders (will be set per-operation)
-	f.hyperlaneEVM = NewHyperlaneEVM(nil, nil)
-	f.hyperlaneStarknet = NewHyperlaneStarknet("")
+	// Initialize protocol handlers as nil - will be created when needed
+	// This ensures we reuse the same instances and mutexes
 
 	return f
 }
-
-
-
-
 
 func (f *Hyperlane7683Filler) ProcessIntent(ctx context.Context, args types.ParsedArgs, originChainName string, blockNumber uint64) (bool, error) {
 	fmt.Printf("🔵 Processing Intent: %s-%s on chain %s (block %d)\n", f.metadata.ProtocolName, args.OrderID, originChainName, blockNumber)
@@ -91,7 +91,7 @@ func (f *Hyperlane7683Filler) Fill(ctx context.Context, args types.ParsedArgs, d
 	fmt.Printf("   Max Spent: %d outputs\n", len(data.MaxSpent))
 
 	for i, instruction := range data.FillInstructions {
-		fmt.Printf("   📦 Instruction %d: Chain %s, Settler %s\n", i+1, instruction.DestinationChainID.String(), instruction.DestinationSettler.Hex())
+		fmt.Printf("   📦 Instruction %d: Chain %s, Settler %s\n", i+1, instruction.DestinationChainID.String(), instruction.DestinationSettler)
 
 		// Simple chain router - clean and extensible
 		switch {
@@ -101,7 +101,11 @@ func (f *Hyperlane7683Filler) Fill(ctx context.Context, args types.ParsedArgs, d
 			if err != nil {
 				return fmt.Errorf("Starknet network not found for chain ID %s: %w", instruction.DestinationChainID.String(), err)
 			}
-			f.hyperlaneStarknet = NewHyperlaneStarknet(chainConfig.RPCURL)
+			
+			// Reuse existing instance or create new one
+			if f.hyperlaneStarknet == nil || f.hyperlaneStarknet.rpcURL != chainConfig.RPCURL {
+				f.hyperlaneStarknet = NewHyperlaneStarknet(chainConfig.RPCURL)
+			}
 			
 			if err := f.hyperlaneStarknet.Fill(ctx, args, originChainName); err != nil {
 				return fmt.Errorf("Starknet fill failed for chain %s: %w", instruction.DestinationChainID.String(), err)
@@ -117,7 +121,11 @@ func (f *Hyperlane7683Filler) Fill(ctx context.Context, args types.ParsedArgs, d
 			if err != nil {
 				return fmt.Errorf("failed to get signer for chain %s: %w", instruction.DestinationChainID.String(), err)
 			}
-			f.hyperlaneEVM = NewHyperlaneEVM(client, signer)
+			
+			// Reuse existing instance or create new one
+			if f.hyperlaneEVM == nil || f.hyperlaneEVM.client != client {
+				f.hyperlaneEVM = NewHyperlaneEVM(client, signer)
+			}
 			
 			if err := f.hyperlaneEVM.Fill(ctx, args, originChainName); err != nil {
 				return fmt.Errorf("EVM fill failed for chain %s: %w", instruction.DestinationChainID.String(), err)
@@ -146,13 +154,17 @@ func (f *Hyperlane7683Filler) SettleOrder(ctx context.Context, args types.Parsed
 	
 	// Simple chain router for settlement
 	switch {
-	case f.isStarknetChain(instruction.DestinationChainID):
+		case f.isStarknetChain(instruction.DestinationChainID):
 		// Get Starknet RPC URL from config by finding the network with matching chain ID
 		chainConfig, err := f.getNetworkConfigByChainID(instruction.DestinationChainID)
 		if err != nil {
 			return fmt.Errorf("Starknet network not found for chain ID %s: %w", instruction.DestinationChainID.String(), err)
 		}
-		f.hyperlaneStarknet = NewHyperlaneStarknet(chainConfig.RPCURL)
+		
+		// Reuse existing instance or create new one
+		if f.hyperlaneStarknet == nil || f.hyperlaneStarknet.rpcURL != chainConfig.RPCURL {
+			f.hyperlaneStarknet = NewHyperlaneStarknet(chainConfig.RPCURL)
+		}
 		
 		if err := f.hyperlaneStarknet.Settle(ctx, args); err != nil {
 			return fmt.Errorf("Starknet settlement failed for chain %s: %w", instruction.DestinationChainID.String(), err)
@@ -168,7 +180,11 @@ func (f *Hyperlane7683Filler) SettleOrder(ctx context.Context, args types.Parsed
 		if err != nil {
 			return fmt.Errorf("failed to get signer for chain %s: %w", instruction.DestinationChainID.String(), err)
 		}
-		f.hyperlaneEVM = NewHyperlaneEVM(client, signer)
+		
+		// Reuse existing instance or create new one
+		if f.hyperlaneEVM == nil || f.hyperlaneEVM.client != client {
+			f.hyperlaneEVM = NewHyperlaneEVM(client, signer)
+		}
 		
 		if err := f.hyperlaneEVM.Settle(ctx, args); err != nil {
 			return fmt.Errorf("EVM settlement failed for chain %s: %w", instruction.DestinationChainID.String(), err)
@@ -188,7 +204,6 @@ func (f *Hyperlane7683Filler) AddDefaultRules() {
 	f.AddRule(f.intentNotFilled)             // Check order hasn't been filled yet
 }
 
-// Note: Enhanced rules implementations are now in rules.go following TypeScript modular structure
 
 func (f *Hyperlane7683Filler) intentNotFilled(args types.ParsedArgs, _ *filler.FillerContext) error {
 	if len(args.ResolvedOrder.FillInstructions) == 0 {

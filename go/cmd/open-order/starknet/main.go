@@ -39,8 +39,8 @@ type NetworkConfig struct {
 // loadNetworks loads network configuration from deployment state
 func loadNetworks() error {
 	// Get Starknet network name from environment
-	starknetNetworkName := getEnvWithDefault("STARKNET_NETWORK_NAME", "Starknet Sepolia")
-	
+	starknetNetworkName := getEnvWithDefault("STARKNET_NETWORK_NAME", "Starknet")
+
 	// Base network entry - completely configurable via env vars
 	networks = []NetworkConfig{
 		{
@@ -56,7 +56,7 @@ func loadNetworks() error {
 	// Check FORKING mode for address loading
 	forkingStr := strings.ToLower(getEnvWithDefault("FORKING", "true"))
 	isForking, _ := strconv.ParseBool(forkingStr)
-	
+
 	if isForking {
 		// Local forks: Use deployment state
 		fmt.Printf("   🔄 FORKING=true: Loading addresses from deployment state (fork mode)\n")
@@ -85,11 +85,11 @@ func loadNetworks() error {
 				hyperlaneAddr := getEnvWithDefault("STARKNET_HYPERLANE_ADDRESS", "")
 				orcaAddr := getEnvWithDefault("STARKNET_ORCA_ADDRESS", "")
 				dogAddr := getEnvWithDefault("STARKNET_DOG_ADDRESS", "")
-				
+
 				if hyperlaneAddr == "" {
 					return fmt.Errorf("FORKING=false but STARKNET_HYPERLANE_ADDRESS not set in .env")
 				}
-				
+
 				networks[i].hyperlaneAddress = hyperlaneAddr
 				networks[i].orcaCoinAddress = orcaAddr
 				networks[i].dogCoinAddress = dogAddr
@@ -104,7 +104,7 @@ func loadNetworks() error {
 			}
 		}
 	}
-	
+
 	// If neither mode loaded addresses successfully, try fallback to legacy files
 	if networks[0].hyperlaneAddress == "" {
 		fmt.Printf("   ⚠️ Fallback: Trying legacy per-file state\n")
@@ -158,14 +158,12 @@ func loadHyperlaneAddress() (string, error) {
 	return "", fmt.Errorf("could not find Hyperlane deployment file in any of the expected paths")
 }
 
-
-
 // loadTokenAddresses loads token addresses from deployment file
 func loadTokenAddresses() ([]TokenInfo, error) {
 	// Try multiple possible paths
 	paths := []string{
-		"state/network_state/starknet-sepolia-mock-erc20-deployment.json",
-		"../state/network_state/starknet-sepolia-mock-erc20-deployment.json",
+		"state/network_state/starknet-mock-erc20-deployment.json",
+		"../state/network_state/starknet-mock-erc20-deployment.json",
 		"../../state/network_state/deployment-state.json",
 	}
 
@@ -282,7 +280,7 @@ func openRandomOrder() {
 	rand.Seed(time.Now().UnixNano())
 
 	// Use configured Starknet network as origin
-	originChain := getEnvWithDefault("STARKNET_NETWORK_NAME", "Starknet Sepolia")
+	originChain := getEnvWithDefault("STARKNET_NETWORK_NAME", "Starknet")
 
 	// Get available destination networks from config
 	destinationChain := getRandomDestinationChain(originChain)
@@ -324,8 +322,8 @@ func openDefaultStarknetToEvm() {
 	fmt.Println("🎯 Opening Default Starknet → EVM Test Order (Nonce: 3)...")
 
 	// Use configured networks instead of hardcoded names
-	originChain := getEnvWithDefault("STARKNET_NETWORK_NAME", "Starknet Sepolia")
-	destinationChain := getEnvWithDefault("DEFAULT_EVM_DESTINATION", "Sepolia")
+	originChain := getEnvWithDefault("STARKNET_NETWORK_NAME", "Starknet")
+	destinationChain := getEnvWithDefault("DEFAULT_EVM_DESTINATION", "Ethereum")
 
 	order := OrderConfig{
 		OriginChain:      originChain,
@@ -999,7 +997,7 @@ func getEnvUint64(key string, defaultValue uint64) uint64 {
 func getRandomDestinationChain(originChain string) string {
 	// Get all available networks from the internal config
 	allNetworks := githubConfig.GetNetworkNames()
-	
+
 	// Filter out the origin chain and non-EVM networks
 	var evmDestinations []string
 	for _, networkName := range allNetworks {
@@ -1007,13 +1005,13 @@ func getRandomDestinationChain(originChain string) string {
 			evmDestinations = append(evmDestinations, networkName)
 		}
 	}
-	
+
 	// If no EVM networks found, use fallback
 	if len(evmDestinations) == 0 {
 		fmt.Printf("   ⚠️ No EVM networks found in config, using fallback destination\n")
 		return getEnvWithDefault("DEFAULT_EVM_DESTINATION", "Sepolia")
 	}
-	
+
 	// Select random destination
 	destIdx := rand.Intn(len(evmDestinations))
 	return evmDestinations[destIdx]

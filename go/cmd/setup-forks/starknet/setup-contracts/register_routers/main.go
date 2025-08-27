@@ -20,10 +20,7 @@ import (
 
 func main() {
 	_ = godotenv.Load()
-	networkName := os.Getenv("NETWORK_NAME")
-	if networkName == "" {
-		networkName = "Starknet Sepolia"
-	}
+	networkName := "Starknet"
 	netCfg, err := config.GetNetworkConfig(networkName)
 	if err != nil {
 		panic(err)

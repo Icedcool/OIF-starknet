@@ -46,7 +46,7 @@ const (
 	UserFundingAmount = "100000000000000000000000"
 
 	// Default deployment file path
-	DeploymentFilePath = "state/network_state/starknet-sepolia-mock-erc20-deployment.json"
+	DeploymentFilePath = "state/network_state/starknet-mock-erc20-deployment.json"
 )
 
 // loadCentralAddresses loads Hyperlane, OrcaCoin, DogCoin from centralized deployment state
@@ -67,19 +67,10 @@ func main() {
 		fmt.Println("⚠️  No .env file found, using environment variables")
 	}
 
-	// Check if we just want to test allowance reading
-	if len(os.Args) > 1 && os.Args[1] == "test-allowance" {
-		testAllowanceReading()
-		return
-	}
-
 	fmt.Println("🚀 Setting up Starknet contracts: funding users and setting allowances...")
 
 	// Load environment variables
-	networkName := os.Getenv("NETWORK_NAME")
-	if networkName == "" {
-		networkName = "Starknet Sepolia" // Default to Starknet Sepolia
-	}
+	networkName := "Starknet"
 
 	// Get network configuration
 	networkConfig, err := config.GetNetworkConfig(networkName)
@@ -189,7 +180,7 @@ func main() {
 // loadTokenDeploymentInfo loads token deployment information from file
 func loadTokenDeploymentInfo(networkName string) ([]TokenInfo, error) {
 	// Try to read from deployment file
-	deploymentFile := fmt.Sprintf("mock_erc20_deployment_%s.json", networkName)
+	deploymentFile := fmt.Sprintf("mock_erc20_deployment_starknet.json")
 
 	// Check if deployment file exists
 	if _, err := os.Stat(deploymentFile); os.IsNotExist(err) {
@@ -355,7 +346,7 @@ func mintTokens(accnt *account.Account, tokenAddress, recipient, amount, tokenNa
 // getHyperlaneAddress gets the Hyperlane contract address for the network
 func getHyperlaneAddress(networkName string) (string, error) {
 	// Try to read from deployment file
-	deploymentFile := fmt.Sprintf("state/network_state/starknet-sepolia-deployment.json")
+	deploymentFile := fmt.Sprintf("state/network_state/starknet-deployment.json")
 
 	// Check if deployment file exists
 	if _, err := os.Stat(deploymentFile); os.IsNotExist(err) {
@@ -692,14 +683,14 @@ func testAllowanceReading() {
 	fmt.Println("🧪 Testing allowance reading...")
 
 	// Load token addresses from deployment file
-	tokens, err := loadTokenDeploymentInfo("Starknet Sepolia")
+	tokens, err := loadTokenDeploymentInfo("Starknet")
 	if err != nil {
 		fmt.Printf("❌ Failed to load token addresses: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Load Hyperlane address from deployment file
-	data, err := os.ReadFile("state/network_state/starknet-sepolia-deployment.json")
+	data, err := os.ReadFile("state/network_state/starknet-deployment.json")
 	if err != nil {
 		fmt.Printf("❌ Failed to load Hyperlane address: %v\n", err)
 		os.Exit(1)

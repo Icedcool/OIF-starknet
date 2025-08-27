@@ -22,7 +22,7 @@ import (
 
 // Default class hash file path
 const (
-	DeclarationFilePath = "state/network_state/starknet-sepolia.json"
+	DeclarationFilePath = "state/network_state/starknet.json"
 )
 
 // DeclarationInfo represents the structure of the declaration file
@@ -41,10 +41,7 @@ func main() {
 	fmt.Println("🚀 Deploying Hyperlane7683 contract to Starknet...")
 
 	// Load environment variables
-	networkName := os.Getenv("NETWORK_NAME")
-	if networkName == "" {
-		networkName = "Starknet Sepolia" // Default to Starknet Sepolia
-	}
+	networkName := "Starknet"
 
 	// Get network configuration
 	networkConfig, err := config.GetNetworkConfig(networkName)
@@ -191,7 +188,7 @@ func getClassHash(networkName string) (string, error) {
 
 	// Try to read from declaration file in canonical state directory
 	stateDir := filepath.Clean(filepath.Join("state", "network_state"))
-	declarationFile := filepath.Join(stateDir, fmt.Sprintf("%s-hyperlane7683-declaration.json", sanitizeNetworkName(networkName)))
+	declarationFile := filepath.Join(stateDir, fmt.Sprintf("starknet-hyperlane7683-declaration.json"))
 
 	// Read and parse declaration file
 	data, err := os.ReadFile(declarationFile)
@@ -235,7 +232,7 @@ func saveDeploymentInfo(classHash, deployedAddress, txHash, salt, networkName st
 		return
 	}
 
-	filename := filepath.Join(stateDir, fmt.Sprintf("%s-hyperlane7683-deployment.json", sanitizeNetworkName(networkName)))
+	filename := filepath.Join(stateDir, fmt.Sprintf("starknet-hyperlane7683-deployment.json"))
 	if err := os.WriteFile(filename, data, 0644); err != nil {
 		fmt.Printf("⚠️  Failed to save deployment info: %s\n", err)
 		return
@@ -281,13 +278,13 @@ func buildConstructorCalldata(permit2Addr, mailboxAddr, ownerAddr, hookAddr, ism
 // updateEnvFile updates or adds an environment variable in the .env file
 func updateEnvFile(key, value string) error {
 	envFile := ".env"
-	
+
 	// Read existing .env file if it exists
 	var lines []string
 	if data, err := os.ReadFile(envFile); err == nil {
 		lines = strings.Split(string(data), "\n")
 	}
-	
+
 	// Look for existing key and update it
 	keyPrefix := key + "="
 	found := false
@@ -298,17 +295,17 @@ func updateEnvFile(key, value string) error {
 			break
 		}
 	}
-	
+
 	// If key not found, add it
 	if !found {
-		lines = append(lines, keyPrefix + value)
+		lines = append(lines, keyPrefix+value)
 	}
-	
+
 	// Write back to .env file
 	content := strings.Join(lines, "\n")
 	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write .env file: %w", err)
 	}
-	
+
 	return nil
 }

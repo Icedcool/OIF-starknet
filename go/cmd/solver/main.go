@@ -34,7 +34,7 @@ func main() {
 	// The solver manager will create specific clients for each chain as needed
 	var ethClient *ethclient.Client
 	for chainName, network := range config.Networks {
-		if chainName != "Starknet Sepolia" { // Use any EVM chain
+		if chainName != "Starknet" { // Use any EVM chain
 			ethClient, err = ethclient.Dial(network.RPCURL)
 			if err != nil {
 				logger.Fatalf("Failed to connect to %s at %s: %v", chainName, network.RPCURL, err)

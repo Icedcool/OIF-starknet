@@ -23,7 +23,7 @@ import (
 // Token deployment configuration
 const (
 	// Default class hash file path (local go/state)
-	DeclarationFilePath = "state/network_state/starknet-sepolia-mock-erc20-declaration.json"
+	DeclarationFilePath = "state/network_state/starknet-mock-erc20-declaration.json"
 )
 
 // DeclarationInfo represents the structure of the declaration file
@@ -50,10 +50,7 @@ func main() {
 	fmt.Println("🚀 Deploying MockERC20 tokens to Starknet...")
 
 	// Load environment variables
-	networkName := os.Getenv("NETWORK_NAME")
-	if networkName == "" {
-		networkName = "Starknet Sepolia" // Default to Starknet Sepolia
-	}
+	networkName := "Starknet"
 
 	// Get network configuration
 	networkConfig, err := config.GetNetworkConfig(networkName)
@@ -219,7 +216,7 @@ func getClassHash(networkName string) (string, error) {
 
 	// Try to read from declaration file in canonical state directory, with fallback to legacy path
 	stateDir := filepath.Clean(filepath.Join("state", "network_state"))
-	declarationFile := filepath.Join(stateDir, fmt.Sprintf("%s-mock-erc20-declaration.json", sanitizeNetworkName(networkName)))
+	declarationFile := filepath.Join(stateDir, fmt.Sprintf("starknet-mock-erc20-declaration.json"))
 
 	// Check if declaration file exists
 	if _, err := os.Stat(declarationFile); os.IsNotExist(err) {
@@ -227,7 +224,7 @@ func getClassHash(networkName string) (string, error) {
 		if _, err := os.Stat(DeclarationFilePath); err == nil {
 			declarationFile = DeclarationFilePath
 		} else {
-			legacy := fmt.Sprintf("mock_erc20_declaration_%s.json", networkName)
+			legacy := fmt.Sprintf("mock_erc20_declaration_starknet.json")
 			if _, err := os.Stat(legacy); err == nil {
 				declarationFile = legacy
 			} else {

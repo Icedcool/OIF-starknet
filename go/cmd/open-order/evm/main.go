@@ -195,7 +195,7 @@ func openRandomToEvm() {
 	// Random origin and destination chains (exclude Starknet from origins)
 	var evmNetworks []NetworkConfig
 	for _, n := range networks {
-		if n.name != "Starknet Sepolia" {
+		if n.name != "Starknet" {
 			evmNetworks = append(evmNetworks, n)
 		}
 	}
@@ -249,7 +249,7 @@ func openRandomToStarknet() {
 	// Pick random EVM origin (exclude Starknet)
 	var evmNetworks []NetworkConfig
 	for _, n := range networks {
-		if n.name != "Starknet Sepolia" {
+		if n.name != "Starknet" {
 			evmNetworks = append(evmNetworks, n)
 		}
 	}
@@ -264,7 +264,7 @@ func openRandomToStarknet() {
 
 	order := OrderConfig{
 		OriginChain:      origin.name,
-		DestinationChain: "Starknet Sepolia",
+		DestinationChain: "Starknet",
 		InputToken:       "OrcaCoin",
 		OutputToken:      "DogCoin",
 		InputAmount:      inputAmount,
@@ -290,8 +290,8 @@ func openDefaultEvmToEvm() {
 	fmt.Println("🎯 Opening Default EVM → EVM Test Order...")
 
 	order := OrderConfig{
-		OriginChain:      "Sepolia",
-		DestinationChain: "Optimism Sepolia",
+		OriginChain:      "Ethereum",
+		DestinationChain: "Optimism",
 		InputToken:       "OrcaCoin",
 		OutputToken:      "DogCoin",
 		InputAmount:      new(big.Int).Mul(big.NewInt(1000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)), // 1000 tokens
@@ -314,8 +314,8 @@ func openDefaultEvmToStarknet() {
 	fmt.Println("🎯 Opening Default EVM → Starknet Test Order...")
 
 	order := OrderConfig{
-		OriginChain:      "Sepolia",
-		DestinationChain: "Starknet Sepolia",
+		OriginChain:      "Ethereum",
+		DestinationChain: "Starknet",
 		InputToken:       "OrcaCoin",
 		OutputToken:      "DogCoin",
 		InputAmount:      new(big.Int).Mul(big.NewInt(1000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)), // 1000 tokens
@@ -550,11 +550,11 @@ func buildOrderData(order OrderConfig, originNetwork *NetworkConfig, destination
 
 	// Convert destination settler depending on destination chain type
 	var destSettlerBytes [32]byte
-	if destinationNetwork.name == "Starknet Sepolia" {
+	if destinationNetwork.name == "Starknet" {
 		// Use Starknet Hyperlane address from centralized state as raw 32 bytes (felt)
 		state, err := deployer.GetDeploymentState()
 		if err == nil {
-			if sn, ok := state.Networks["Starknet Sepolia"]; ok && sn.HyperlaneAddress != "" {
+			if sn, ok := state.Networks["Starknet"]; ok && sn.HyperlaneAddress != "" {
 				destSettlerBytes = hexToBytes32(sn.HyperlaneAddress)
 			}
 		}
@@ -574,7 +574,7 @@ func buildOrderData(order OrderConfig, originNetwork *NetworkConfig, destination
 
 	// For recipient, we need to determine if it should be EVM or Starknet address
 	var recipientBytes [32]byte
-	if destinationNetwork.name == "Starknet Sepolia" {
+	if destinationNetwork.name == "Starknet" {
 		// If destination is Starknet, recipient should be the Starknet address of the same user
 		var starknetUserAddr string
 		switch order.User {
@@ -592,9 +592,9 @@ func buildOrderData(order OrderConfig, originNetwork *NetworkConfig, destination
 		// If destination is EVM, recipient is the same EVM user
 		recipientBytes = userBytes
 	}
-	if destinationNetwork.name == "Starknet Sepolia" {
+	if destinationNetwork.name == "Starknet" {
 		if state, err := deployer.GetDeploymentState(); err == nil {
-			if sn, ok := state.Networks["Starknet Sepolia"]; ok && sn.DogCoinAddress != "" {
+			if sn, ok := state.Networks["Starknet"]; ok && sn.DogCoinAddress != "" {
 				outputTokenBytes = hexToBytes32(sn.DogCoinAddress)
 			} else {
 				log.Fatalf("missing Starknet DogCoin address in state for destination; refusing to fallback")

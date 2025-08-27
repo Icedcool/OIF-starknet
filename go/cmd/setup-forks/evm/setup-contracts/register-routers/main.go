@@ -36,7 +36,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to read deployment state: %v", err)
 	}
-	snNet := state.Networks["Starknet Sepolia"]
+	snNet := state.Networks["Starknet"]
 	if snNet.HyperlaneAddress == "" {
 		log.Fatalf("Starknet Hyperlane address not found in deployment state")
 	}
@@ -44,7 +44,7 @@ func main() {
 	// Precompute destinations and routers per network
 	networkNames := config.GetNetworkNames()
 	for _, networkName := range networkNames {
-		if networkName == "Starknet Sepolia" {
+		if networkName == "Starknet" {
 			continue
 		}
 
@@ -65,7 +65,7 @@ func main() {
 			}
 			destDomains = append(destDomains, uint32(dom))
 
-			if otherName == "Starknet Sepolia" {
+			if otherName == "Starknet" {
 				// Starknet router as raw 32-byte felt
 				rb := hexToBytes32(snNet.HyperlaneAddress)
 				routerBytes = append(routerBytes, rb)
@@ -89,7 +89,7 @@ func main() {
 		gasDefault.SetString("0x186a0", 0) // 100,000 wei
 
 		// Special handling for Starknet domain - it needs more gas due to complex operations
-		starknetDomain := uint32(23448591) // Starknet Sepolia domain ID
+		starknetDomain := uint32(config.Networks["Starknet"].HyperlaneDomain) // Starknet domain ID from config
 		starknetGas := new(big.Int)
 		starknetGas.SetString("0x3d090", 0) // 250,000 wei for Starknet operations
 

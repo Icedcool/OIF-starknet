@@ -37,7 +37,7 @@ var networks = func() []struct {
 
 	for _, networkName := range networkNames {
 		// Skip non-EVM networks (like Starknet)
-		if networkName == "Starknet Sepolia" {
+		if networkName == "Starknet" {
 			continue
 		}
 

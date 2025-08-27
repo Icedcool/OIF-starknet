@@ -32,10 +32,7 @@ func main() {
 	fmt.Println("📋 Declaring MockERC20 contract on Starknet...")
 
 	// Load environment variables
-	networkName := os.Getenv("NETWORK_NAME")
-	if networkName == "" {
-		networkName = "Starknet Sepolia" // Default to Starknet Sepolia
-	}
+	networkName := "Starknet"
 
 	// Get network configuration
 	networkConfig, err := config.GetNetworkConfig(networkName)
@@ -157,7 +154,7 @@ func saveDeclarationInfo(txHash, classHash, networkName string) {
 		return
 	}
 
-	filename := filepath.Join(stateDir, fmt.Sprintf("%s-mock-erc20-declaration.json", sanitizeNetworkName(networkName)))
+	filename := filepath.Join(stateDir, fmt.Sprintf("starknet-mock-erc20-declaration.json"))
 	if err := os.WriteFile(filename, data, 0644); err != nil {
 		fmt.Printf("⚠️  Failed to save declaration info: %s\n", err)
 		return

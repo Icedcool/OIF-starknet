@@ -1,4 +1,4 @@
-package filler
+package base
 
 import (
 	"context"
@@ -7,17 +7,17 @@ import (
 )
 
 // Rule represents a rule that can be evaluated during intent processing
-type Rule func(args types.ParsedArgs, context *FillerContext) error
+type Rule func(args types.ParsedArgs, context *SolverContext) error
 
-// FillerContext contains context information for rule evaluation
-type FillerContext struct {
+// SolverContext contains context information for rule evaluation
+type SolverContext struct {
 	OriginInfo []string
 	TargetInfo []string
 	Metadata   interface{}
 }
 
-// BaseFiller defines the interface for intent fillers
-type BaseFiller interface {
+// BaseSolver defines the interface for intent solvers
+type BaseSolver interface {
 	// ProcessIntent processes an intent through the complete lifecycle
 	// Returns (success, error) where success=true means the order was fully settled
 	ProcessIntent(ctx context.Context, args types.ParsedArgs, originChainName string, blockNumber uint64) (bool, error)
@@ -31,41 +31,41 @@ type BaseFiller interface {
 	// SettleOrder handles post-fill settlement
 	SettleOrder(ctx context.Context, args types.ParsedArgs, data types.IntentData, originChainName string) error
 
-	// AddRule adds a custom rule to the filler
+	// AddRule adds a custom rule to the solver
 	AddRule(rule Rule)
 
 	// GetRules returns all rules
 	GetRules() []Rule
 }
 
-// BaseFillerImpl provides a base implementation of BaseFiller
-type BaseFillerImpl struct {
+// BaseSolverImpl provides a base implementation of BaseSolver
+type BaseSolverImpl struct {
 	rules           []Rule
 	allowBlockLists types.AllowBlockLists
 	metadata        interface{}
 }
 
-// NewBaseFiller creates a new base filler
-func NewBaseFiller(allowBlockLists types.AllowBlockLists, metadata interface{}) *BaseFillerImpl {
-	return &BaseFillerImpl{
+// NewBaseSolver creates a new base solver
+func NewBaseSolver(allowBlockLists types.AllowBlockLists, metadata interface{}) *BaseSolverImpl {
+	return &BaseSolverImpl{
 		rules:           make([]Rule, 0),
 		allowBlockLists: allowBlockLists,
 		metadata:        metadata,
 	}
 }
 
-// AddRule adds a rule to the filler
-func (f *BaseFillerImpl) AddRule(rule Rule) {
+// AddRule adds a rule to the solver
+func (f *BaseSolverImpl) AddRule(rule Rule) {
 	f.rules = append(f.rules, rule)
 }
 
 // GetRules returns all rules
-func (f *BaseFillerImpl) GetRules() []Rule {
+func (f *BaseSolverImpl) GetRules() []Rule {
 	return f.rules
 }
 
 // ProcessIntent implements the complete intent processing lifecycle
-func (f *BaseFillerImpl) ProcessIntent(ctx context.Context, args types.ParsedArgs, originChainName string, blockNumber uint64) (bool, error) {
+func (f *BaseSolverImpl) ProcessIntent(ctx context.Context, args types.ParsedArgs, originChainName string, blockNumber uint64) (bool, error) {
 	// Step 1: Prepare intent (evaluate rules)
 	intent, err := f.PrepareIntent(ctx, args)
 	if err != nil {
@@ -85,12 +85,12 @@ func (f *BaseFillerImpl) ProcessIntent(ctx context.Context, args types.ParsedArg
 	if err := f.SettleOrder(ctx, args, intent.Data, originChainName); err != nil {
 		return false, err
 	}
-	
+
 	return true, nil // Successfully filled and settled
 }
 
 // PrepareIntent evaluates rules to determine if intent should be filled
-func (f *BaseFillerImpl) PrepareIntent(ctx context.Context, args types.ParsedArgs) (*types.Result[types.IntentData], error) {
+func (f *BaseSolverImpl) PrepareIntent(ctx context.Context, args types.ParsedArgs) (*types.Result[types.IntentData], error) {
 	// Check allow/block lists first
 	if !f.isAllowedIntent(args) {
 		result := types.NewErrorResult[types.IntentData]("Intent blocked by allow/block lists")
@@ -99,7 +99,7 @@ func (f *BaseFillerImpl) PrepareIntent(ctx context.Context, args types.ParsedArg
 
 	// Evaluate all rules
 	for _, rule := range f.rules {
-		context := &FillerContext{
+		context := &SolverContext{
 			Metadata: f.metadata,
 		}
 
@@ -119,20 +119,20 @@ func (f *BaseFillerImpl) PrepareIntent(ctx context.Context, args types.ParsedArg
 	return &result, nil
 }
 
-// Fill executes the actual intent filling (to be implemented by concrete fillers)
-func (f *BaseFillerImpl) Fill(ctx context.Context, args types.ParsedArgs, data types.IntentData, originChainName string, blockNumber uint64) error {
+// Fill executes the actual intent filling (to be implemented by concrete solvers)
+func (f *BaseSolverImpl) Fill(ctx context.Context, args types.ParsedArgs, data types.IntentData, originChainName string, blockNumber uint64) error {
 	// This is a placeholder - concrete implementations should override this
 	return nil
 }
 
-// SettleOrder handles post-fill settlement (to be implemented by concrete fillers)
-func (f *BaseFillerImpl) SettleOrder(ctx context.Context, args types.ParsedArgs, data types.IntentData, originChainName string) error {
+// SettleOrder handles post-fill settlement (to be implemented by concrete solvers)
+func (f *BaseSolverImpl) SettleOrder(ctx context.Context, args types.ParsedArgs, data types.IntentData, originChainName string) error {
 	// This is a placeholder - concrete implementations should override this
 	return nil
 }
 
 // isAllowedIntent checks if an intent is allowed based on allow/block lists
-func (f *BaseFillerImpl) isAllowedIntent(args types.ParsedArgs) bool {
+func (f *BaseSolverImpl) isAllowedIntent(args types.ParsedArgs) bool {
 	// Check block list first
 	for _, blockItem := range f.allowBlockLists.BlockList {
 		if f.matchesAllowBlockItem(blockItem, args) {
@@ -156,7 +156,7 @@ func (f *BaseFillerImpl) isAllowedIntent(args types.ParsedArgs) bool {
 }
 
 // matchesAllowBlockItem checks if args match an allow/block list item
-func (f *BaseFillerImpl) matchesAllowBlockItem(item types.AllowBlockListItem, args types.ParsedArgs) bool {
+func (f *BaseSolverImpl) matchesAllowBlockItem(item types.AllowBlockListItem, args types.ParsedArgs) bool {
 	// Check sender address
 	if item.SenderAddress != "*" && item.SenderAddress != args.SenderAddress {
 		return false

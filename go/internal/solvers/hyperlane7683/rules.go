@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/NethermindEth/juno/core/felt"
-	"github.com/NethermindEth/oif-starknet/go/internal/filler"
+	"github.com/NethermindEth/oif-starknet/go/internal/base"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/NethermindEth/starknet.go/utils"
@@ -21,10 +21,10 @@ import (
 // Rule implementations for Hyperlane7683 protocol
 // Following the modular structure from TypeScript reference
 
-// EnoughBalanceOnDestination validates that the filler has sufficient token balances
+// EnoughBalanceOnDestination validates that the solver has sufficient token balances
 // before attempting to fill orders (prevents failed fills due to insufficient funds)
-func (f *Hyperlane7683Filler) enoughBalanceOnDestination(args types.ParsedArgs, ctx *filler.FillerContext) error {
-	fmt.Printf("   🔍 Validating filler token balances across chains...\n")
+func (f *Hyperlane7683Solver) enoughBalanceOnDestination(args types.ParsedArgs, ctx *base.SolverContext) error {
+	fmt.Printf("   🔍 Validating solver token balances across chains...\n")
 
 	// Group amounts by chain and token
 	amountByTokenByChain := make(map[uint64]map[common.Address]*big.Int)
@@ -77,10 +77,10 @@ func (f *Hyperlane7683Filler) enoughBalanceOnDestination(args types.ParsedArgs, 
 			return fmt.Errorf("failed to get signer for chain %d: %w", chainID, err)
 		}
 
-		fillerAddress := signer.From
+		solverAddress := signer.From
 
 		for tokenAddr, requiredAmount := range tokenAmounts {
-			balance, err := f.getTokenBalance(client, tokenAddr, fillerAddress)
+			balance, err := f.getTokenBalance(client, tokenAddr, solverAddress)
 			if err != nil {
 				return fmt.Errorf("failed to get balance for token %s on chain %d: %w", tokenAddr.Hex(), chainID, err)
 			}
@@ -99,8 +99,8 @@ func (f *Hyperlane7683Filler) enoughBalanceOnDestination(args types.ParsedArgs, 
 	return nil
 }
 
-// validateStarknetBalance checks if the filler has sufficient token balance on Starknet
-func (f *Hyperlane7683Filler) validateStarknetBalance(output types.Output) error {
+// validateStarknetBalance checks if the solver has sufficient token balance on Starknet
+func (f *Hyperlane7683Solver) validateStarknetBalance(output types.Output) error {
 	// Get Starknet network config
 	chainConfig, err := f.getNetworkConfigByChainID(output.ChainID)
 	if err != nil {
@@ -134,8 +134,8 @@ func (f *Hyperlane7683Filler) validateStarknetBalance(output types.Output) error
 	return nil
 }
 
-// getStarknetTokenBalance retrieves token balance directly using RPC (without full StarknetFiller)
-func (f *Hyperlane7683Filler) getStarknetTokenBalance(rpcURL, tokenAddressHex, holderAddressHex string) (*big.Int, error) {
+// getStarknetTokenBalance retrieves token balance directly using RPC (without full StarknetSolver)
+func (f *Hyperlane7683Solver) getStarknetTokenBalance(rpcURL, tokenAddressHex, holderAddressHex string) (*big.Int, error) {
 	// Create a minimal provider just for balance checking
 	provider, err := rpc.NewProvider(rpcURL)
 	if err != nil {
@@ -179,7 +179,7 @@ func (f *Hyperlane7683Filler) getStarknetTokenBalance(rpcURL, tokenAddressHex, h
 }
 
 // getStarknetTokenAddress converts EVM token address to Starknet format
-func (f *Hyperlane7683Filler) getStarknetTokenAddress(output types.Output) string {
+func (f *Hyperlane7683Solver) getStarknetTokenAddress(output types.Output) string {
 	// For Starknet destinations, use the token address directly
 	if f.isStarknetChain(output.ChainID) {
 		fmt.Printf("   🎯 Using Starknet token address: %s\n", output.Token)
@@ -193,7 +193,7 @@ func (f *Hyperlane7683Filler) getStarknetTokenAddress(output types.Output) strin
 
 // FilterByTokenAndAmount validates that tokens and amounts are within allowed limits
 // Supports configurable per-chain, per-token limits (following TypeScript structure)
-func (f *Hyperlane7683Filler) filterByTokenAndAmount(args types.ParsedArgs, ctx *filler.FillerContext) error {
+func (f *Hyperlane7683Solver) filterByTokenAndAmount(args types.ParsedArgs, ctx *base.SolverContext) error {
 	// TODO: Make this configurable via metadata CustomRules
 	// For now, implement basic profitability check like TypeScript version
 
@@ -217,7 +217,7 @@ func (f *Hyperlane7683Filler) filterByTokenAndAmount(args types.ParsedArgs, ctx 
 }
 
 // getTokenBalance retrieves the token balance for an address
-func (f *Hyperlane7683Filler) getTokenBalance(client *ethclient.Client, tokenAddr, holderAddr common.Address) (*big.Int, error) {
+func (f *Hyperlane7683Solver) getTokenBalance(client *ethclient.Client, tokenAddr, holderAddr common.Address) (*big.Int, error) {
 	// Handle native token (ETH)
 	if tokenAddr == (common.Address{}) {
 		return client.BalanceAt(context.Background(), holderAddr, nil)

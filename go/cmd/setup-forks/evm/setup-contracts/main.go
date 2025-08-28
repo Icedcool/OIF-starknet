@@ -122,7 +122,7 @@ func main() {
 			fmt.Printf("   💾 Deployment state saved for %s\n", network.name)
 		}
 
-		// Fund both Alice (order creator) and Solver (order filler)
+		// Fund both Alice (order creator) and Solver (order solver)
 		if err := fundUsers(client, deployerKey, aliceKey, solverKey, orcaCoinAddress, dogCoinAddress, network.name); err != nil {
 			fmt.Printf("   ❌ Failed to fund users: %v\n", err)
 			continue

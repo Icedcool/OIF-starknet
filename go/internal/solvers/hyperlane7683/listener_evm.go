@@ -3,7 +3,7 @@ package hyperlane7683
 // Module: EVM Open event listener for Hyperlane7683
 // - Polls/backfills block ranges on EVM networks
 // - Parses Hyperlane7683 Open events via abigen bindings
-// - Translates to types.ParsedArgs and invokes the filler
+// - Translates to types.ParsedArgs and invokes the solver
 // - Persists last processed block via deployment state
 
 import (
@@ -15,15 +15,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NethermindEth/oif-starknet/go/internal/base"
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
-	contracts "github.com/NethermindEth/oif-starknet/go/internal/contracts"
+	hyperlane7683 "github.com/NethermindEth/oif-starknet/go/internal/contracts"
 	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
-	"github.com/NethermindEth/oif-starknet/go/internal/listener"
 	"github.com/NethermindEth/oif-starknet/go/internal/logutil"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	gethtypes "github.com/ethereum/go-ethereum/core/types"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -32,7 +32,7 @@ var openEventTopic = common.HexToHash("0x3448bbc2203c608599ad448eeb1007cea04b788
 
 // evmListener implements listener.BaseListener for EVM chains for Hyperlane7683
 type evmListener struct {
-	config             *listener.ListenerConfig
+	config             *base.ListenerConfig
 	client             *ethclient.Client
 	contractAddress    common.Address
 	lastProcessedBlock uint64
@@ -40,7 +40,7 @@ type evmListener struct {
 	mu                 sync.RWMutex
 }
 
-func NewEVMListener(config *listener.ListenerConfig, rpcURL string) (listener.BaseListener, error) {
+func NewEVMListener(config *base.ListenerConfig, rpcURL string) (base.BaseListener, error) {
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial RPC: %w", err)
@@ -70,7 +70,7 @@ func NewEVMListener(config *listener.ListenerConfig, rpcURL string) (listener.Ba
 }
 
 // Start begins listening for events
-func (l *evmListener) Start(ctx context.Context, handler listener.EventHandler) (listener.ShutdownFunc, error) {
+func (l *evmListener) Start(ctx context.Context, handler base.EventHandler) (base.ShutdownFunc, error) {
 	go l.realEventLoop(ctx, handler)
 	return func() { close(l.stopChan) }, nil
 }
@@ -99,7 +99,7 @@ func (l *evmListener) MarkBlockFullyProcessed(blockNumber uint64) error {
 	return nil
 }
 
-func (l *evmListener) realEventLoop(ctx context.Context, handler listener.EventHandler) {
+func (l *evmListener) realEventLoop(ctx context.Context, handler base.EventHandler) {
 	p := logutil.Prefix(l.config.ChainName)
 	//fmt.Printf("%s⚙️  starting listener...\n", p)
 	if err := l.catchUpHistoricalBlocks(ctx, handler); err != nil {
@@ -110,7 +110,7 @@ func (l *evmListener) realEventLoop(ctx context.Context, handler listener.EventH
 	l.startPolling(ctx, handler)
 }
 
-func (l *evmListener) processCurrentBlockRange(ctx context.Context, handler listener.EventHandler) error {
+func (l *evmListener) processCurrentBlockRange(ctx context.Context, handler base.EventHandler) error {
 
 	currentBlock, err := l.client.BlockNumber(ctx)
 	if err != nil {
@@ -152,7 +152,7 @@ func (l *evmListener) processCurrentBlockRange(ctx context.Context, handler list
 }
 
 // processBlockRange processes logs in [fromBlock, toBlock] and returns the highest contiguous block fully processed
-func (l *evmListener) processBlockRange(ctx context.Context, fromBlock, toBlock uint64, handler listener.EventHandler) (uint64, error) {
+func (l *evmListener) processBlockRange(ctx context.Context, fromBlock, toBlock uint64, handler base.EventHandler) (uint64, error) {
 	if fromBlock > toBlock {
 		fmt.Printf("⚠️  Invalid block range (%s) in processBlockRange: fromBlock (%d) > toBlock (%d), skipping\n", l.config.ChainName, fromBlock, toBlock)
 		return l.lastProcessedBlock, nil
@@ -177,7 +177,7 @@ func (l *evmListener) processBlockRange(ctx context.Context, fromBlock, toBlock 
 	}
 
 	// Group logs by block
-	byBlock := make(map[uint64][]gethtypes.Log)
+	byBlock := make(map[uint64][]ethtypes.Log)
 	for _, lg := range logs {
 		byBlock[lg.BlockNumber] = append(byBlock[lg.BlockNumber], lg)
 	}
@@ -190,7 +190,7 @@ func (l *evmListener) processBlockRange(ctx context.Context, fromBlock, toBlock 
 		// Process each event in this block
 		for _, lg := range events {
 			// Use generated binding to parse Open events
-			filterer, err := contracts.NewHyperlane7683Filterer(l.contractAddress, l.client)
+			filterer, err := hyperlane7683.NewHyperlane7683Filterer(l.contractAddress, l.client)
 			if err != nil {
 				fmt.Printf("❌ Failed to bind filterer: %v\n", err)
 				continue
@@ -219,7 +219,7 @@ func (l *evmListener) processBlockRange(ctx context.Context, fromBlock, toBlock 
 }
 
 // handleParsedOpenEvent converts a typed binding event into our internal ParsedArgs and dispatches the handler
-func (l *evmListener) handleParsedOpenEvent(ev contracts.Hyperlane7683Open, handler listener.EventHandler) (bool, error) {
+func (l *evmListener) handleParsedOpenEvent(ev hyperlane7683.Hyperlane7683Open, handler base.EventHandler) (bool, error) {
 	p := logutil.Prefix(l.config.ChainName)
 
 	// Map ResolvedCrossChainOrder
@@ -271,7 +271,7 @@ func (l *evmListener) handleParsedOpenEvent(ev contracts.Hyperlane7683Open, hand
 	fmt.Printf("%s📜 Open order: OrderID=%s\n", p, parsedArgs.OrderID)
 	fmt.Printf("%s📊 Order details: User=%s\n", p, ro.User)
 
-	// Just pass to handler, let the filler decide what to do
+	// Just pass to handler, let the solver decide what to do
 	return handler(parsedArgs, l.config.ChainName, ev.Raw.BlockNumber)
 }
 
@@ -297,7 +297,7 @@ func isStarknetChainByID(chainID *big.Int) bool {
 	return false
 }
 
-func (l *evmListener) catchUpHistoricalBlocks(ctx context.Context, handler listener.EventHandler) error {
+func (l *evmListener) catchUpHistoricalBlocks(ctx context.Context, handler base.EventHandler) error {
 	p := logutil.Prefix(l.config.ChainName)
 	fmt.Printf("%s🔄 Catching up on historical blocks...\n", p)
 	currentBlock, err := l.client.BlockNumber(ctx)
@@ -334,7 +334,7 @@ func (l *evmListener) catchUpHistoricalBlocks(ctx context.Context, handler liste
 	return nil
 }
 
-func (l *evmListener) startPolling(ctx context.Context, handler listener.EventHandler) {
+func (l *evmListener) startPolling(ctx context.Context, handler base.EventHandler) {
 	fmt.Printf("📭 Starting event polling...\n")
 	for {
 		select {

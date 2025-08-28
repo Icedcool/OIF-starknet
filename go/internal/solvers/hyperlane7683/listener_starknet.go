@@ -19,16 +19,16 @@ import (
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/NethermindEth/starknet.go/utils"
 
+	"github.com/NethermindEth/oif-starknet/go/internal/base"
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
 	"github.com/NethermindEth/oif-starknet/go/internal/deployer"
-	"github.com/NethermindEth/oif-starknet/go/internal/listener"
 	"github.com/NethermindEth/oif-starknet/go/internal/logutil"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
 )
 
 // starknetListener implements listener.BaseListener for Starknet chains
 type starknetListener struct {
-	config             *listener.ListenerConfig
+	config             *base.ListenerConfig
 	provider           *rpc.Provider
 	contractAddress    *felt.Felt
 	openEventSelector  *felt.Felt
@@ -38,7 +38,7 @@ type starknetListener struct {
 }
 
 // NewStarknetListener creates a new Starknet listener
-func NewStarknetListener(config *listener.ListenerConfig, rpcURL string) (listener.BaseListener, error) {
+func NewStarknetListener(config *base.ListenerConfig, rpcURL string) (base.BaseListener, error) {
 	provider, err := rpc.NewProvider(rpcURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect Starknet RPC: %w", err)
@@ -72,7 +72,7 @@ func NewStarknetListener(config *listener.ListenerConfig, rpcURL string) (listen
 }
 
 // Start begins listening for events
-func (l *starknetListener) Start(ctx context.Context, handler listener.EventHandler) (listener.ShutdownFunc, error) {
+func (l *starknetListener) Start(ctx context.Context, handler base.EventHandler) (base.ShutdownFunc, error) {
 	go l.realEventLoop(ctx, handler)
 	return func() { close(l.stopChan) }, nil
 }
@@ -101,7 +101,7 @@ func (l *starknetListener) MarkBlockFullyProcessed(blockNumber uint64) error {
 	return nil
 }
 
-func (l *starknetListener) realEventLoop(ctx context.Context, handler listener.EventHandler) {
+func (l *starknetListener) realEventLoop(ctx context.Context, handler base.EventHandler) {
 	p := logutil.Prefix(l.config.ChainName)
 	//fmt.Printf("%s⚙️  starting listener...\n", p)
 	if err := l.catchUpHistoricalBlocks(ctx, handler); err != nil {
@@ -112,7 +112,7 @@ func (l *starknetListener) realEventLoop(ctx context.Context, handler listener.E
 	l.startPolling(ctx, handler)
 }
 
-func (l *starknetListener) catchUpHistoricalBlocks(ctx context.Context, handler listener.EventHandler) error {
+func (l *starknetListener) catchUpHistoricalBlocks(ctx context.Context, handler base.EventHandler) error {
 	p := logutil.Prefix(l.config.ChainName)
 	fmt.Printf("%s🔄 Catching up on historical blocks...\n", p)
 	currentBlock, err := l.provider.BlockNumber(ctx)
@@ -154,7 +154,7 @@ func (l *starknetListener) catchUpHistoricalBlocks(ctx context.Context, handler 
 	return nil
 }
 
-func (l *starknetListener) startPolling(ctx context.Context, handler listener.EventHandler) {
+func (l *starknetListener) startPolling(ctx context.Context, handler base.EventHandler) {
 	fmt.Printf("📭 Starting event polling...\n")
 	for {
 		select {
@@ -173,7 +173,7 @@ func (l *starknetListener) startPolling(ctx context.Context, handler listener.Ev
 	}
 }
 
-func (l *starknetListener) processCurrentBlockRange(ctx context.Context, handler listener.EventHandler) error {
+func (l *starknetListener) processCurrentBlockRange(ctx context.Context, handler base.EventHandler) error {
 	currentBlock, err := l.provider.BlockNumber(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current block number: %v", err)
@@ -209,7 +209,7 @@ func (l *starknetListener) processCurrentBlockRange(ctx context.Context, handler
 }
 
 // processBlockRange processes events in [fromBlock, toBlock] and returns the highest contiguous block fully processed
-func (l *starknetListener) processBlockRange(ctx context.Context, fromBlock, toBlock uint64, handler listener.EventHandler) (uint64, error) {
+func (l *starknetListener) processBlockRange(ctx context.Context, fromBlock, toBlock uint64, handler base.EventHandler) (uint64, error) {
 	if fromBlock > toBlock {
 		fmt.Printf("⚠️  Invalid block range (%s) in processBlockRange: fromBlock (%d) > toBlock (%d), skipping\n", l.config.ChainName, fromBlock, toBlock)
 		return l.lastProcessedBlock, nil

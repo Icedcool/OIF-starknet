@@ -219,7 +219,3 @@ This implementation is designed to be easily extensible:
 ## License
 
 Apache-2.0
-
-```
-
-```

@@ -45,8 +45,7 @@ func (f *Hyperlane7683Solver) enoughBalanceOnDestination(args types.ParsedArgs, 
 		tokenAddr := output.Token
 
 		// Convert string address to EVM address for map operations
-		converter := types.NewAddressConverter()
-		tokenAddrEVM, err := converter.ToEVMAddress(tokenAddr)
+		tokenAddrEVM, err := types.ToEVMAddress(tokenAddr)
 		if err != nil {
 			return fmt.Errorf("failed to convert token address %s to EVM format: %w", tokenAddr, err)
 		}

@@ -197,7 +197,6 @@ func (h *HyperlaneStarknet) Settle(ctx context.Context, args types.ParsedArgs) e
 	if err != nil {
 		return fmt.Errorf("failed to quote gas payment: %w", err)
 	}
-	fmt.Printf("   💰 Gas payment quoted: %s wei\n", gasPayment.String())
 
 	// Approve ETH for the quoted gas amount
 	if err := h.ensureETHApproval(ctx, gasPayment, destinationSettler); err != nil {
@@ -291,29 +290,21 @@ func (h *HyperlaneStarknet) setupApprovals(ctx context.Context, args types.Parse
 		return nil
 	}
 
-	fmt.Printf("   🔍 Setting up Starknet ERC20 approvals before fill\n")
+	fmt.Printf("   🔍 Setting up Starknet token approvals for fill\n")
 
-	for i, maxSpent := range args.ResolvedOrder.MaxSpent {
+	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
 		// Skip native ETH (empty string)
 		if maxSpent.Token == "" {
-			fmt.Printf("   ⏭️  Skipping approval for native ETH (index %d)\n", i)
 			continue
 		}
 
-		fmt.Printf("   📊 MaxSpent[%d] Token: %s, Amount: %s\n", i, maxSpent.Token, maxSpent.Amount.String())
-
 		// Convert token address to Starknet format
-
-		fmt.Printf("   🎯 TOKEN[%d] APPROVAL CALL:\n", i)
-		fmt.Printf("     • Token address: %s\n", maxSpent.Token)
-		fmt.Printf("     • Amount to approve: %s\n", maxSpent.Amount.String())
-
 		if err := h.ensureTokenApproval(ctx, maxSpent.Token, maxSpent.Amount, destinationSettler); err != nil {
 			return fmt.Errorf("starknet approval failed for token %s: %w", maxSpent.Token, err)
 		}
-
-		fmt.Printf("   ✅ TOKEN[%d] approval completed\n", i)
 	}
+
+	fmt.Printf("   🔍 Set Starknet token approvals for fill\n")
 
 	return nil
 }
@@ -397,7 +388,6 @@ func (h *HyperlaneStarknet) ensureETHApproval(ctx context.Context, amount *big.I
 
 	// If allowance is sufficient, no need to approve
 	if currentAllowance.Cmp(amount) >= 0 {
-		fmt.Printf("   ✅ ETH allowance sufficient: %s >= %s\n", currentAllowance.String(), amount.String())
 		return nil
 	}
 

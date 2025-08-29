@@ -169,7 +169,6 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 	if err != nil {
 		return fmt.Errorf("quoteGasPayment failed on %s: %w", destinationSettler, err)
 	}
-	fmt.Printf("   💰 Gas payment quoted: %s wei\n", gasPayment.String())
 
 	// Prepare order IDs array (contract expects array)
 	orderIDs := make([][32]byte, 1)
@@ -282,15 +281,13 @@ func (h *HyperlaneEVM) setupApprovals(ctx context.Context, args types.ParsedArgs
 		return nil
 	}
 
-	fmt.Printf("   🔍 Setting up EVM ERC20 approvals before fill\n")
+	fmt.Printf("   🔄 Setting up EVM token approvals for fill\n")
 
-	for i, maxSpent := range args.ResolvedOrder.MaxSpent {
+	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
 		// Skip native ETH (empty string)
 		if maxSpent.Token == "" {
 			continue
 		}
-
-		fmt.Printf("   📊 MaxSpent[%d] Token: %s, Amount: %s\n", i, maxSpent.Token, maxSpent.Amount.String())
 
 		// Convert token address string to EVM address for approval
 		tokenAddr, err := types.ToEVMAddress(maxSpent.Token)
@@ -301,9 +298,8 @@ func (h *HyperlaneEVM) setupApprovals(ctx context.Context, args types.ParsedArgs
 		if err := h.ensureTokenApproval(ctx, tokenAddr, destinationSettlerAddr, maxSpent.Amount); err != nil {
 			return fmt.Errorf("approval failed for token %s: %w", maxSpent.Token, err)
 		}
-
-		fmt.Printf("   ✅ TOKEN[%d] approval completed\n", i)
 	}
+	fmt.Printf("   ✅ EVM token approvals set for fill\n")
 
 	return nil
 }
@@ -357,11 +353,8 @@ func (h *HyperlaneEVM) ensureTokenApproval(ctx context.Context, tokenAddr, spend
 
 	// If allowance is sufficient, no approval needed
 	if currentAllowance.Cmp(amount) >= 0 {
-		fmt.Printf("   ✅ Sufficient allowance: have %s, need %s\n", currentAllowance.String(), amount.String())
 		return nil
 	}
-
-	fmt.Printf("   📝 Approving %s tokens for %s\n", amount.String(), spender.Hex())
 
 	// Approve exact amount needed
 	approveABI := `[{"type":"function","name":"approve","inputs":[{"type":"address","name":"spender"},{"type":"uint256","name":"amount"}],"outputs":[{"type":"bool","name":""}],"stateMutability":"nonpayable"}]`

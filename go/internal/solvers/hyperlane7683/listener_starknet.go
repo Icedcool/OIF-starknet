@@ -27,12 +27,14 @@ import (
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
 )
 
+// Open event topic
+var openEventSelector, _ = utils.HexToFelt("0x35D8BA7F4BF26B6E2E2060E5BD28107042BE35460FBD828C9D29A2D8AF14445")
+
 // starknetListener implements listener.BaseListener for Starknet chains
 type starknetListener struct {
 	config             *base.ListenerConfig
 	provider           *rpc.Provider
 	contractAddress    *felt.Felt
-	openEventSelector  *felt.Felt
 	lastProcessedBlock uint64
 	stopChan           chan struct{}
 	mu                 sync.RWMutex
@@ -45,15 +47,9 @@ func NewStarknetListener(config *base.ListenerConfig, rpcURL string) (base.BaseL
 		return nil, fmt.Errorf("failed to connect Starknet RPC: %w", err)
 	}
 
-	addrFelt, err := utils.HexToFelt(config.ContractAddress)
+	addrFelt, err := types.ToStarknetAddress(config.ContractAddress)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Starknet contract address: %w", err)
-	}
-
-	// Open event selector for Cairo event "Open"
-	openSelector, err := utils.HexToFelt("0x35D8BA7F4BF26B6E2E2060E5BD28107042BE35460FBD828C9D29A2D8AF14445")
-	if err != nil {
-		return nil, fmt.Errorf("invalid Open event selector: %w", err)
 	}
 
 	var lastProcessedBlock uint64
@@ -69,18 +65,23 @@ func NewStarknetListener(config *base.ListenerConfig, rpcURL string) (base.BaseL
 		return nil, fmt.Errorf("network %s not found in deployment state", config.ChainName)
 	}
 
-	return &starknetListener{config: config, provider: provider, contractAddress: addrFelt, openEventSelector: openSelector, lastProcessedBlock: lastProcessedBlock, stopChan: make(chan struct{})}, nil
+	return &starknetListener{
+		config:             config,
+		provider:           provider,
+		contractAddress:    addrFelt,
+		lastProcessedBlock: lastProcessedBlock,
+		stopChan:           make(chan struct{}),
+	}, nil
 }
 
 // Start begins listening for events
 func (l *starknetListener) Start(ctx context.Context, handler base.EventHandler) (base.ShutdownFunc, error) {
-	go l.realEventLoop(ctx, handler)
+	go l.startEventLoop(ctx, handler)
 	return func() { close(l.stopChan) }, nil
 }
 
 // Stop gracefully stops the listener
 func (l *starknetListener) Stop() error {
-	fmt.Printf("Stopping Starknet listener...\n")
 	close(l.stopChan)
 	return nil
 }
@@ -102,23 +103,22 @@ func (l *starknetListener) MarkBlockFullyProcessed(blockNumber uint64) error {
 	return nil
 }
 
-func (l *starknetListener) realEventLoop(ctx context.Context, handler base.EventHandler) {
+func (l *starknetListener) startEventLoop(ctx context.Context, handler base.EventHandler) {
 	p := logutil.Prefix(l.config.ChainName)
-	//fmt.Printf("%s⚙️  starting listener...\n", p)
 	if err := l.catchUpHistoricalBlocks(ctx, handler); err != nil {
 		fmt.Printf("%s❌ backfill failed: %v\n", p, err)
 	}
 	fmt.Printf("%s🔄 backfill complete\n", p)
-	time.Sleep(1 * time.Second)
 	l.startPolling(ctx, handler)
 }
 
 func (l *starknetListener) catchUpHistoricalBlocks(ctx context.Context, handler base.EventHandler) error {
 	p := logutil.Prefix(l.config.ChainName)
 	fmt.Printf("%s🔄 Catching up on historical blocks...\n", p)
+
 	currentBlock, err := l.provider.BlockNumber(ctx)
 	if err != nil {
-		return fmt.Errorf("%sfailed to get current block number%v", p, err)
+		return fmt.Errorf("%sfailed to get current block number: %v", p, err)
 	}
 	// Apply confirmations during backfill as well
 	safeBlock := currentBlock
@@ -151,23 +151,23 @@ func (l *starknetListener) catchUpHistoricalBlocks(ctx context.Context, handler 
 			fmt.Printf("%s💾 Persisted LastIndexedBlock=%d\n", p, newLast)
 		}
 	}
-	fmt.Printf("%s✅ Historical block processing completed\n", p)
+	fmt.Printf("%s✅ Historical block processing complete\n", p)
 	return nil
 }
 
 func (l *starknetListener) startPolling(ctx context.Context, handler base.EventHandler) {
-	fmt.Printf("📭 Starting event polling...\n")
+	fmt.Printf("%s📭 Starting event polling...\n", logutil.Prefix(l.config.ChainName))
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("📭 Context cancelled, stopping polling for %s\n", l.config.ChainName)
+			fmt.Printf("🔄 Context cancelled, stopping event polling\n")
 			return
 		case <-l.stopChan:
-			fmt.Printf("📭 Stop signal received, stopping polling for %s\n", l.config.ChainName)
+			fmt.Printf("🔄 Stop signal received, stopping event polling\n")
 			return
 		default:
 			if err := l.processCurrentBlockRange(ctx, handler); err != nil {
-				fmt.Printf("❌ Failed to process current block range: %v\n", err)
+				fmt.Printf("%s❌ Failed to process current block range: %v\n", logutil.Prefix(l.config.ChainName), err)
 			}
 			time.Sleep(time.Duration(l.config.PollInterval) * time.Millisecond)
 		}
@@ -190,22 +190,24 @@ func (l *starknetListener) processCurrentBlockRange(ctx context.Context, handler
 	// Check if we have any new blocks to process
 	if fromBlock > toBlock {
 		// No new blocks to process, we're up to date
-		// Only log this occasionally to avoid spam
-		// if time.Now().Unix()%30 == 0 { // Log every 30 seconds max
-		// 	fmt.Printf("🧭 %s Starknet range: from=%d to=%d (current=%d, conf=%d) - ✅ Already up to date\n", l.config.ChainName, fromBlock, toBlock, currentBlock, l.config.ConfirmationBlocks)
-		// }
 		return nil
 	}
+
+	fmt.Printf("🧭 %s Starknet range: from=%d to=%d (current=%d, conf=%d)\n", l.config.ChainName, fromBlock, toBlock, currentBlock, l.config.ConfirmationBlocks)
+
 	newLast, err := l.processBlockRange(ctx, fromBlock, toBlock, handler)
 	if err != nil {
 		return fmt.Errorf("failed to process blocks %d-%d: %v", fromBlock, toBlock, err)
 	}
+
+	// Block processing complete
 	l.lastProcessedBlock = newLast
 	if err := deployer.UpdateLastIndexedBlock(l.config.ChainName, newLast); err != nil {
 		fmt.Printf("⚠️  Failed to persist LastIndexedBlock for %s: %v\n", l.config.ChainName, err)
 	} else {
 		fmt.Printf("💾 Persisted LastIndexedBlock=%d for %s\n", newLast, l.config.ChainName)
 	}
+
 	return nil
 }
 
@@ -216,111 +218,79 @@ func (l *starknetListener) processBlockRange(ctx context.Context, fromBlock, toB
 		return l.lastProcessedBlock, nil
 	}
 
-	pageSize := 128
-	cursor := ""
+	// Fetch events for the block range
+	filter := rpc.EventFilter{
+		FromBlock: rpc.BlockID{Number: &fromBlock},
+		ToBlock:   rpc.BlockID{Number: &toBlock},
+		Address:   l.contractAddress,
+		Keys:      [][]*felt.Felt{{openEventSelector}},
+	}
+
+	query := rpc.EventsInput{
+		EventFilter:       filter,
+		ResultPageRequest: rpc.ResultPageRequest{ChunkSize: 128, ContinuationToken: ""},
+	}
+
+	logs, err := l.provider.Events(ctx, query)
+	if err != nil {
+		return l.lastProcessedBlock, fmt.Errorf("failed to filter events: %w", err)
+	}
+
+	fmt.Printf("📩 %s events found: %d\n", l.config.ChainName, len(logs.Events))
+	if len(logs.Events) > 0 {
+		fmt.Printf("📩 Found %d Open events on %s\n", len(logs.Events), l.config.ChainName)
+	}
+
+	// Group logs by block
+	byBlock := make(map[uint64][]rpc.EmittedEvent)
+	for _, event := range logs.Events {
+		byBlock[event.BlockNumber] = append(byBlock[event.BlockNumber], event)
+	}
+
+	// Process blocks in order
 	newLast := l.lastProcessedBlock
+	for b := fromBlock; b <= toBlock; b++ {
+		events := byBlock[b]
 
-	retryCount := 0
-	for {
-		fb := fromBlock
-		tb := toBlock
-		filter := rpc.EventFilter{
-			FromBlock: rpc.BlockID{Number: &fb},
-			ToBlock:   rpc.BlockID{Number: &tb},
-			Address:   l.contractAddress,
-			// Filter by first key = Open selector
-			Keys: [][]*felt.Felt{{l.openEventSelector}},
-		}
-
-		input := rpc.EventsInput{
-			EventFilter:       filter,
-			ResultPageRequest: rpc.ResultPageRequest{ChunkSize: pageSize, ContinuationToken: cursor},
-		}
-
-		res, err := l.provider.Events(ctx, input)
-		if err != nil {
-			return newLast, fmt.Errorf("failed to fetch events: %w", err)
-		}
-
-		if len(res.Events) > 0 {
-			fmt.Printf("📩 Found %d events on %s (blocks %d-%d)\n", len(res.Events), l.config.ChainName, fromBlock, toBlock)
-		}
-
-		// group by block
-		byBlock := make(map[uint64][]rpc.EmittedEvent)
-		for _, ev := range res.Events {
-			byBlock[ev.BlockNumber] = append(byBlock[ev.BlockNumber], ev)
-		}
-
-		// Iterate blocks in range
-		blockFailed := false
-		for b := fromBlock; b <= toBlock; b++ {
-			if evs, ok := byBlock[b]; ok {
-				for _, ev := range evs {
-					// Only handle Open events (first key == Open selector)
-					isOpen := false
-					if len(ev.Event.Keys) >= 1 {
-						k0 := ev.Event.Keys[0].Bytes()
-						openSel := l.openEventSelector.Bytes()
-						k0b := k0[:]
-						openb := openSel[:]
-						if bytes.Equal(k0b, openb) {
-							isOpen = true
-						}
-					}
-					if !isOpen {
-						continue
-					}
-
-					ro, derr := decodeResolvedOrderFromFelts(ev.Event.Data)
-					if derr != nil {
-						fmt.Printf("❌ Failed to decode ResolvedCrossChainOrder: %v\n", derr)
-						blockFailed = true
-						continue
-					}
-
-					parsedArgs := types.ParsedArgs{
-						OrderID:       common.BytesToHash(ro.OrderID[:]).Hex(),
-						SenderAddress: ro.User,
-						Recipients:    []types.Recipient{{DestinationChainName: l.config.ChainName, RecipientAddress: "*"}},
-						ResolvedOrder: ro,
-					}
-
-					settled, herr := handler(parsedArgs, l.config.ChainName, b)
-					if herr != nil {
-						fmt.Printf("❌ Failed to handle event: %v\n", herr)
-						blockFailed = true
-						continue
-					}
-
-					// Track settlement status (for now, assume all events are processed)
-					// In a more sophisticated implementation, we'd use the actual settlement status
-					_ = settled
+		// Process each event in this block
+		for _, event := range events {
+			// Ensure each event is the correct type
+			isOpen := false
+			if len(event.Event.Keys) >= 1 {
+				actual := event.Event.Keys[0].Bytes()
+				expected := openEventSelector.Bytes()
+				if bytes.Equal(actual[:], expected[:]) {
+					isOpen = true
 				}
 			}
-			if blockFailed {
-				break
+			if !isOpen {
+				continue
 			}
-			newLast = b
+
+			// Parse Open event
+			ro, derr := decodeResolvedOrderFromFelts(event.Event.Data)
+			if derr != nil {
+				fmt.Printf("❌ Failed to decode ResolvedCrossChainOrder: %v\n", derr)
+				continue
+			}
+			parsedArgs := types.ParsedArgs{
+				OrderID:       common.BytesToHash(ro.OrderID[:]).Hex(),
+				SenderAddress: ro.User,
+				Recipients:    []types.Recipient{{DestinationChainName: l.config.ChainName, RecipientAddress: "*"}},
+				ResolvedOrder: ro,
+			}
+
+			// Handle the event
+			_, herr := handler(parsedArgs, l.config.ChainName, b)
+			if herr != nil {
+				fmt.Printf("❌ Failed to handle event: %v\n", herr)
+				continue
+			}
 		}
 
-		if !blockFailed {
-			break
-		}
-		retryCount++
-		// Get max retries from config
-		cfg, err := config.LoadConfig()
-		maxRetries := 5 // fallback default
-		if err == nil {
-			maxRetries = cfg.MaxRetries
-		}
-		if retryCount >= maxRetries {
-			fmt.Printf("⏭️  Giving up after %d retries for range %d-%d\n", retryCount, fromBlock, toBlock)
-			break
-		}
-		fmt.Printf("🔁 Retry %d for range %d-%d\n", retryCount, fromBlock, toBlock)
-		time.Sleep(500 * time.Millisecond)
-		cursor = res.ContinuationToken
+		// Mark block as processed
+		newLast = b
+		fmt.Printf("   ✅ Block %d processed: %d events\n", b, len(events))
 	}
 
 	return newLast, nil
@@ -391,9 +361,6 @@ func decodeResolvedOrderFromFelts(data []*felt.Felt) (types.ResolvedCrossChainOr
 		// Parsing Cairo event data
 
 		// Parse the origin_data bytes (OrderData struct) from the event data
-		fmt.Printf("     📦 Parsing OrderData from Cairo event:\n")
-
-		// Construct EVM-compatible origin_data from Cairo event data
 
 		// Read size and u128 array length from the event data (absolute indices)
 		size := utils.FeltToBigInt(data[21]).Uint64()

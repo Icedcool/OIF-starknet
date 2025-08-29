@@ -259,5 +259,3 @@ func GetDefaultNetwork() NetworkConfig {
 func GetDefaultRPCURL() string {
 	return Networks["Ethereum"].RPCURL
 }
-
-

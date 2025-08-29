@@ -131,29 +131,27 @@ func UpdateNetworkState(networkName string, orcaCoinAddr, dogCoinAddr string) er
 
 // UpdateLastIndexedBlock updates the LastIndexedBlock for a specific network and saves to file
 func UpdateLastIndexedBlock(networkName string, newBlockNumber uint64) error {
-	fmt.Printf("🔍 DEBUG UpdateLastIndexedBlock called: network=%s, newBlock=%d\n", networkName, newBlockNumber)
-	
 	stateMu.Lock()
 	defer stateMu.Unlock()
 
 	state, err := readStateLocked()
-	if err != nil { return fmt.Errorf("failed to get deployment state: %w", err) }
+	if err != nil {
+		return fmt.Errorf("failed to get deployment state: %w", err)
+	}
 
 	network, exists := state.Networks[networkName]
-	if !exists { return fmt.Errorf("network %s not found in deployment state", networkName) }
+	if !exists {
+		return fmt.Errorf("network %s not found in deployment state", networkName)
+	}
 
-	oldBlock := network.LastIndexedBlock
 	network.LastIndexedBlock = newBlockNumber
 	network.LastUpdated = time.Now().Format(time.RFC3339)
 	state.Networks[networkName] = network
 
-	if err := saveStateLocked(state); err != nil { return fmt.Errorf("failed to save deployment state: %w", err) }
-
-	if oldBlock != newBlockNumber {
-		fmt.Printf("✅ Updated %s LastIndexedBlock: %d → %d\n", networkName, oldBlock, newBlockNumber)
-	} else {
-		fmt.Printf("🔄 %s LastIndexedBlock unchanged: %d\n", networkName, newBlockNumber)
+	if err := saveStateLocked(state); err != nil {
+		return fmt.Errorf("failed to save deployment state: %w", err)
 	}
+
 	return nil
 }
 
@@ -163,25 +161,32 @@ func UpdateHyperlaneAddress(networkName string, newAddress string) error {
 	defer stateMu.Unlock()
 
 	state, err := readStateLocked()
-	if err != nil { return fmt.Errorf("failed to get deployment state: %w", err) }
+	if err != nil {
+		return fmt.Errorf("failed to get deployment state: %w", err)
+	}
 
 	network, exists := state.Networks[networkName]
-	if !exists { return fmt.Errorf("network %s not found in deployment state", networkName) }
+	if !exists {
+		return fmt.Errorf("network %s not found in deployment state", networkName)
+	}
 
 	network.HyperlaneAddress = newAddress
 	network.LastUpdated = time.Now().Format(time.RFC3339)
 	state.Networks[networkName] = network
 
-	if err := saveStateLocked(state); err != nil { return fmt.Errorf("failed to save deployment state: %w", err) }
+	if err := saveStateLocked(state); err != nil {
+		return fmt.Errorf("failed to save deployment state: %w", err)
+	}
 
-	fmt.Printf("✅ Updated %s HyperlaneAddress: %s\n", networkName, newAddress)
 	return nil
 }
 
 // DisplayDeploymentState prints the current deployment state to stdout
 func DisplayDeploymentState() error {
 	state, err := GetDeploymentState()
-	if err != nil { return fmt.Errorf("failed to get deployment state: %w", err) }
+	if err != nil {
+		return fmt.Errorf("failed to get deployment state: %w", err)
+	}
 
 	fmt.Printf("📊 Current Deployment State:\n")
 	fmt.Printf("============================\n")
@@ -231,30 +236,48 @@ func readStateLocked() (*DeploymentState, error) {
 func saveStateLocked(state *DeploymentState) error {
 	stateFile := getStateFilePath()
 	dir := filepath.Dir(stateFile)
-	if err := os.MkdirAll(dir, 0755); err != nil { return fmt.Errorf("failed to create state directory: %w", err) }
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create state directory: %w", err)
+	}
 
 	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil { return fmt.Errorf("failed to marshal state: %w", err) }
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %w", err)
+	}
 
 	tmp, err := os.CreateTemp(dir, "deployment-state-*.tmp")
-	if err != nil { return fmt.Errorf("failed to create temp state file: %w", err) }
+	if err != nil {
+		return fmt.Errorf("failed to create temp state file: %w", err)
+	}
 	tmpPath := tmp.Name()
 	defer func() { tmp.Close(); os.Remove(tmpPath) }()
 
-	if _, err := tmp.Write(data); err != nil { return fmt.Errorf("failed to write temp state file: %w", err) }
-	if err := tmp.Sync(); err != nil { return fmt.Errorf("failed to sync temp state file: %w", err) }
-	if err := tmp.Close(); err != nil { return fmt.Errorf("failed to close temp state file: %w", err) }
-	if err := os.Rename(tmpPath, stateFile); err != nil { return fmt.Errorf("failed to atomically replace state file: %w", err) }
+	if _, err := tmp.Write(data); err != nil {
+		return fmt.Errorf("failed to write temp state file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp state file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close temp state file: %w", err)
+	}
+	if err := os.Rename(tmpPath, stateFile); err != nil {
+		return fmt.Errorf("failed to atomically replace state file: %w", err)
+	}
 	return nil
 }
 
 // getStateFilePath returns the path to the deployment state file
 func getStateFilePath() string {
-	if custom := os.Getenv("STATE_FILE"); custom != "" { return custom }
+	if custom := os.Getenv("STATE_FILE"); custom != "" {
+		return custom
+	}
 	candidates := []string{"state/network_state/deployment-state.json", "deployment-state.json"}
 	for _, p := range candidates {
 		dir := filepath.Dir(p)
-		if _, err := os.Stat(dir); err == nil { return p }
+		if _, err := os.Stat(dir); err == nil {
+			return p
+		}
 	}
 	return "state/network_state/deployment-state.json"
 }

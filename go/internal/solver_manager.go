@@ -25,12 +25,6 @@ import (
 // - Manages multiple protocol solvers (EVM and Starknet)
 // - Provides centralized client and signer management
 // - Coordinates solver initialization and lifecycle
-//
-// Design Principles:
-// - Consistent logging patterns across all operations
-// - Clear separation of concerns between EVM and Starknet
-// - Unified error handling and status reporting
-// - Configurable solver registry with enable/disable capabilities
 
 // SolverConfig defines configuration for a solver
 type SolverConfig struct {
@@ -89,13 +83,9 @@ func (sm *SolverManager) InitializeSolvers(ctx context.Context) error {
 			continue
 		}
 
-		fmt.Printf("🔧 Initializing solver: %s\n", solverName)
-
-		if err := sm.initializeSolver(ctx, solverName, config); err != nil {
+		if err := sm.initializeSolver(ctx, solverName); err != nil {
 			return fmt.Errorf("failed to initialize solver %s: %w", solverName, err)
 		}
-
-		fmt.Printf("   ✅ Solver %s initialized successfully\n", solverName)
 	}
 
 	fmt.Printf("✅ All solvers initialized successfully\n")
@@ -103,7 +93,7 @@ func (sm *SolverManager) InitializeSolvers(ctx context.Context) error {
 }
 
 // initializeSolver starts a specific solver
-func (sm *SolverManager) initializeSolver(ctx context.Context, name string, config SolverConfig) error {
+func (sm *SolverManager) initializeSolver(ctx context.Context, name string) error {
 	switch name {
 	case "hyperlane7683":
 		return sm.initializeHyperlane7683(ctx)
@@ -256,7 +246,7 @@ func (sm *SolverManager) initializeHyperlane7683(ctx context.Context) error {
 	// Start listeners for each intent source
 	fmt.Printf("   📡 Starting network listeners...\n")
 	listenerCount := 0
-	
+
 	for _, source := range []string{"Base", "Optimism", "Arbitrum", "Ethereum", "Starknet"} {
 		networkConfig, exists := config.Networks[source]
 		if !exists {
@@ -370,6 +360,7 @@ func (sm *SolverManager) GetSolverStatus() map[string]bool {
 }
 
 // getStarknetHyperlaneAddress gets the correct Starknet Hyperlane address based on FORKING mode
+// Note: This is needed until there is a final hyperlane deployment address
 func getStarknetHyperlaneAddress(networkConfig config.NetworkConfig) (string, error) {
 	forkingStr := strings.ToLower(os.Getenv("FORKING"))
 	// Check FORKING environment variable (default: true for local forks)

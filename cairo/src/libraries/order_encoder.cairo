@@ -52,6 +52,7 @@ pub mod OrderEncoder {
     //        \"u128\",\"Data\":\"u128*\")\"u256\"(\"low\": \"u128\",\"high\":\"u128*\")",
     //    );
 
+    // NOTE: Hard coded to match Solidity's hash so that order IDs are compatible
     pub const ORDER_DATA_TYPE_HASH: u256 =
         0x08d75650babf4de09c9273d48ef647876057ed91d4323f8a2e3ebc2cd8a63b5e;
 
@@ -61,6 +62,8 @@ pub mod OrderEncoder {
     }
 
     /// Compute the ID of an OrderData struct (matching EVM's keccak256 hash)
+    /// Note: `compute_keccak_byte_array` returns the hash in little-endian format. Solidity's
+    /// keccak returns it in big-endian.
     pub fn id(order: @OrderData) -> u256 {
         u256_reverse_endian(compute_keccak_byte_array(@encode(order).into()))
     }

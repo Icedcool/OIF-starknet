@@ -1,0 +1,121 @@
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - dogsled
+    - dupl
+    - errcheck
+    - exhaustruct
+    - funlen
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - lll
+    - makezero
+    - misspell
+    - mnd
+    - nakedret
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - staticcheck
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - usetesting
+    - whitespace
+
+linters-settings:
+  dupl:
+    threshold: 100
+  funlen:
+    lines: 120
+    statements: 50
+  goconst:
+    min-len: 2
+    min-occurrences: 3
+  gocritic:
+    disabled-checks:
+      - sloppyReassign
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - unnamedResult
+      - importShadow
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+  gocyclo:
+    min-complexity: 15
+  gosec:
+    excludes:
+      - G115 # Allow ReadAll for now
+  govet:
+    enable:
+      - nilness
+    settings:
+      printf:
+        funcs:
+          - (github.com/sirupsen/logrus.Logger).Infof
+          - (github.com/sirupsen/logrus.Logger).Warnf
+          - (github.com/sirupsen/logrus.Logger).Errorf
+          - (github.com/sirupsen/logrus.Logger).Fatalf
+  lll:
+    line-length: 140
+  misspell:
+    locale: US
+  mnd:
+    checks:
+      - argument
+      - case
+      - condition
+      - return
+    ignored-numbers:
+      - "0"
+      - "1"
+      - "2"
+      - "3"
+    ignored-functions:
+      - strings.SplitN
+  nolintlint:
+    require-explanation: false
+    require-specific: false
+    allow-unused: false
+  staticcheck:
+    checks:
+      - "all"
+      - "-QF1003" # Allow single if instead of switch
+      - "-QF1008" # Allow optional embedded fields
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - exhaustruct
+        - funlen
+        - gosec
+        - goconst
+        - lll
+        - mnd
+    - source: '^//go:generate '
+      linters:
+        - lll
+  exclude:
+    - target/
+    - state/
+
+run:
+  timeout: 10m
+  modules-download-mode: readonly

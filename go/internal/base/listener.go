@@ -49,7 +49,7 @@ func NewListenerConfig(
 		pollInterval = 10000 // default 10 seconds
 	}
 	if maxBlockRange == 0 {
-		maxBlockRange = 100 // default 100 blocks
+		maxBlockRange = 9 // default 9 blocks
 	}
 
 	return &ListenerConfig{

@@ -1,247 +1,360 @@
 package hyperlane7683
 
+// Module: Rules system for Hyperlane7683 solver
+// - Provides pluggable validation rules for order processing
+// - Supports both EVM and Starknet chain-specific logic
+// - Designed to be easily extensible for custom solver implementations
+
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"os"
-	"strings"
 
-	"github.com/NethermindEth/juno/core/felt"
-	"github.com/NethermindEth/oif-starknet/go/internal/base"
+	"github.com/NethermindEth/oif-starknet/go/internal/config"
+	"github.com/NethermindEth/oif-starknet/go/internal/logutil"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
+	"github.com/NethermindEth/oif-starknet/go/pkg/ethutil"
+	"github.com/NethermindEth/oif-starknet/go/pkg/starknetutil"
 	"github.com/NethermindEth/starknet.go/rpc"
-	"github.com/NethermindEth/starknet.go/utils"
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/holiman/uint256"
 )
 
-// Rule implementations for Hyperlane7683 protocol
-// Following the modular structure from TypeScript reference
+const starknetNetworkName = "Starknet"
 
-// EnoughBalanceOnDestination validates that the solver has sufficient token balances
-// before attempting to fill orders (prevents failed fills due to insufficient funds)
-func (f *Hyperlane7683Solver) enoughBalanceOnDestination(args types.ParsedArgs, ctx *base.SolverContext) error {
-	fmt.Printf("   🔍 Validating solver token balances across chains...\n")
+// RuleResult represents the result of a rule evaluation
+type RuleResult struct {
+	Passed bool
+	Reason string
+}
 
-	// Group amounts by chain and token
-	amountByTokenByChain := make(map[uint64]map[common.Address]*big.Int)
+// Rule defines the interface for validation rules
+// T represents the input type for the rule (typically types.ParsedArgs)
+// R represents the result type (typically RuleResult)
+type Rule[T any, R any] interface {
+	Name() string
+	Evaluate(ctx context.Context, args T) R
+}
 
-	for _, output := range args.ResolvedOrder.MaxSpent {
-		chainID := output.ChainID.Uint64()
+// LegacyRule maintains backward compatibility with the old interface
+type LegacyRule interface {
+	Name() string
+	Evaluate(ctx context.Context, args types.ParsedArgs) RuleResult
+}
 
-		// Check if this is a Starknet chain using dynamic detection
-		if f.isStarknetChain(output.ChainID) {
-			// For Starknet, implement balance validation using Starknet RPC
-			if err := f.validateStarknetBalance(output); err != nil {
-				return fmt.Errorf("Starknet balance validation failed: %w", err)
-			}
+// RulesEngine coordinates rule evaluation
+// T represents the input type for rules (typically types.ParsedArgs)
+// R represents the result type (typically RuleResult)
+type RulesEngine[T any, R any] struct {
+	rules []Rule[T, R]
+}
+
+// LegacyRulesEngine maintains backward compatibility
+type LegacyRulesEngine struct {
+	rules []LegacyRule
+}
+
+// NewRulesEngine creates a new legacy rules engine with default rules
+func NewRulesEngine() *LegacyRulesEngine {
+	return &LegacyRulesEngine{
+		rules: []LegacyRule{
+			&BalanceRule{},
+			&ProfitabilityRule{},
+		},
+	}
+}
+
+// NewGenericRulesEngine creates a new generic rules engine
+func NewGenericRulesEngine[T any, R any]() *RulesEngine[T, R] {
+	return &RulesEngine[T, R]{
+		rules: []Rule[T, R]{},
+	}
+}
+
+// AddRule adds a custom rule to the engine
+func (re *RulesEngine) AddRule(rule Rule) {
+	re.rules = append(re.rules, rule)
+}
+
+// EvaluateAll runs all rules and returns the first failure, or success if all pass
+func (re *RulesEngine) EvaluateAll(ctx context.Context, args types.ParsedArgs) RuleResult {
+	// Get chain IDs for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+
+	for _, rule := range re.rules {
+		result := rule.Evaluate(ctx, args)
+		if !result.Passed {
+			logutil.CrossChainOperation(fmt.Sprintf("Rule '%s' failed: %s", rule.Name(), result.Reason), originChainID, destChainID, args.OrderID)
+			return result
+		}
+		logutil.CrossChainOperation(fmt.Sprintf("Rule '%s' passed", rule.Name()), originChainID, destChainID, args.OrderID)
+	}
+	return RuleResult{Passed: true, Reason: "All rules passed"}
+}
+
+// BalanceRule validates that the solver has sufficient balance for the order
+type BalanceRule struct{}
+
+func (br *BalanceRule) Name() string {
+	return "BalanceCheck"
+}
+
+func (br *BalanceRule) Evaluate(ctx context.Context, args types.ParsedArgs) RuleResult {
+	if len(args.ResolvedOrder.MaxSpent) == 0 {
+		return RuleResult{Passed: true, Reason: "No tokens to spend"}
+	}
+
+	// Determine if this is an EVM or Starknet order based on destination chain
+	destinationChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+
+	// Check if destination is Starknet
+	if isStarknetChain(destinationChainID) {
+		return br.checkStarknetBalance(ctx, args)
+	}
+
+	// Check EVM chains (ETH, ARB, OPT, BASE)
+	return br.checkEVMBalance(ctx, args)
+}
+
+func (br *BalanceRule) checkStarknetBalance(ctx context.Context, args types.ParsedArgs) RuleResult {
+	// Get chain IDs for cross-chain logging
+	//originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	//destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+	//logutil.CrossChainOperation("Checking Starknet balances", originChainID, destChainID, args.OrderID)
+
+	// Get solver's Starknet address from environment
+	solverAddrHex := os.Getenv("STARKNET_SOLVER_ADDRESS")
+	if solverAddrHex == "" {
+		return RuleResult{Passed: false, Reason: "STARKNET_SOLVER_ADDRESS not set"}
+	}
+
+	// Get Starknet RPC URL
+	starknetRPC := os.Getenv("STARKNET_RPC_URL")
+	if starknetRPC == "" {
+		return RuleResult{Passed: false, Reason: "STARKNET_RPC_URL not set"}
+	}
+
+	provider, err := rpc.NewProvider(starknetRPC)
+	if err != nil {
+		return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to create Starknet provider: %v", err)}
+	}
+
+	// Check balance for each token in MaxSpent
+	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
+		// Skip native ETH (empty string)
+		if maxSpent.Token == "" {
 			continue
 		}
 
-		// Handle EVM chains normally
-		tokenAddr := output.Token
+		// Check if this token belongs to Starknet chain
+		if maxSpent.ChainID.Uint64() != getStarknetChainID() {
+			continue
+		}
 
-		// Convert string address to EVM address for map operations
-		tokenAddrEVM, err := types.ToEVMAddress(tokenAddr)
+		balance, err := starknetutil.ERC20Balance(provider, maxSpent.Token, solverAddrHex)
+	if err != nil {
+			return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to check balance for token %s: %v", maxSpent.Token, err)}
+		}
+
+		if balance.Cmp(maxSpent.Amount) < 0 {
+			return RuleResult{Passed: false, Reason: fmt.Sprintf("Insufficient balance for token %s: have %s, need %s",
+				maxSpent.Token, balance.String(), maxSpent.Amount.String())}
+		}
+
+		fmt.Printf("   ✅ Token %s balance sufficient: %s >= %s\n",
+			maxSpent.Token, balance.String(), maxSpent.Amount.String())
+	}
+
+	return RuleResult{Passed: true, Reason: "Starknet balance check passed"}
+}
+
+func (br *BalanceRule) checkEVMBalance(ctx context.Context, args types.ParsedArgs) RuleResult {
+	// Get chain IDs for cross-chain logging
+	//originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	//destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+	//logutil.CrossChainOperation("Checking EVM balances", originChainID, destChainID, args.OrderID)
+
+	// Get solver's EVM address from environment
+	solverAddrHex := os.Getenv("SOLVER_PUB_KEY")
+	if solverAddrHex == "" {
+		return RuleResult{Passed: false, Reason: "SOLVER_PUB_KEY not set"}
+	}
+
+	solverAddr := common.HexToAddress(solverAddrHex)
+
+	// Get destination chain ID to determine which EVM RPC to use
+	destinationChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+
+	// Find the network config for this chain
+	var networkConfig *config.NetworkConfig
+	for _, network := range config.Networks {
+		if network.ChainID == destinationChainID {
+			networkConfig = &network
+			break
+		}
+	}
+
+	if networkConfig == nil {
+		return RuleResult{Passed: false, Reason: fmt.Sprintf("No network config found for chain ID %d", destinationChainID)}
+	}
+
+	// Connect to EVM RPC
+	client, err := ethclient.Dial(networkConfig.RPCURL)
+	if err != nil {
+		return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to connect to EVM RPC: %v", err)}
+	}
+	defer client.Close()
+
+	// Check balance for each token in MaxSpent
+	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
+		// Skip native ETH (empty string)
+		if maxSpent.Token == "" {
+			continue
+		}
+
+		// Check if this token belongs to this EVM chain
+		if maxSpent.ChainID.Uint64() != destinationChainID {
+			continue
+		}
+
+		tokenAddr := common.HexToAddress(maxSpent.Token)
+		balance, err := ethutil.ERC20Balance(client, tokenAddr, solverAddr)
 		if err != nil {
-			return fmt.Errorf("failed to convert token address %s to EVM format: %w", tokenAddr, err)
+			return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to check balance for token %s: %v", maxSpent.Token, err)}
 		}
 
-		if amountByTokenByChain[chainID] == nil {
-			amountByTokenByChain[chainID] = make(map[common.Address]*big.Int)
+		if balance.Cmp(maxSpent.Amount) < 0 {
+			return RuleResult{Passed: false, Reason: fmt.Sprintf("Insufficient balance for token %s: have %s, need %s",
+				maxSpent.Token, balance.String(), maxSpent.Amount.String())}
 		}
 
-		if amountByTokenByChain[chainID][tokenAddrEVM] == nil {
-			amountByTokenByChain[chainID][tokenAddrEVM] = big.NewInt(0)
-		}
-
-		amountByTokenByChain[chainID][tokenAddrEVM].Add(
-			amountByTokenByChain[chainID][tokenAddrEVM],
-			output.Amount,
-		)
+		fmt.Printf("   ✅ Token %s balance sufficient: %s >= %s\n",
+			maxSpent.Token, balance.String(), maxSpent.Amount.String())
 	}
 
-	// Check balances for each EVM chain and token
-	for chainID, tokenAmounts := range amountByTokenByChain {
-		client, err := f.getEVMClient(chainID)
-		if err != nil {
-			return fmt.Errorf("failed to get client for chain %d: %w", chainID, err)
-		}
-
-		signer, err := f.getEVMSigner(chainID)
-		if err != nil {
-			return fmt.Errorf("failed to get signer for chain %d: %w", chainID, err)
-		}
-
-		solverAddress := signer.From
-
-		for tokenAddr, requiredAmount := range tokenAmounts {
-			balance, err := f.getTokenBalance(client, tokenAddr, solverAddress)
-			if err != nil {
-				return fmt.Errorf("failed to get balance for token %s on chain %d: %w", tokenAddr.Hex(), chainID, err)
-			}
-
-			if balance.Cmp(requiredAmount) < 0 {
-				return fmt.Errorf("insufficient balance on chain %d for token %s: have %s, need %s",
-					chainID, tokenAddr.Hex(), balance.String(), requiredAmount.String())
-			}
-
-			fmt.Printf("   ✅ Chain %d Token %s: Balance %s >= Required %s\n",
-				chainID, tokenAddr.Hex(), balance.String(), requiredAmount.String())
-		}
-	}
-
-	fmt.Printf("   ✅ All token balance validations passed\n")
-	return nil
+	return RuleResult{Passed: true, Reason: "EVM balance check passed"}
 }
 
-// validateStarknetBalance checks if the solver has sufficient token balance on Starknet
-func (f *Hyperlane7683Solver) validateStarknetBalance(output types.Output) error {
-	// Get Starknet network config
-	chainConfig, err := f.getNetworkConfigByChainID(output.ChainID)
-	if err != nil {
-		return fmt.Errorf("failed to get Starknet network config: %w", err)
-	}
+// ProfitabilityRule validates that the order is profitable for the solver
+type ProfitabilityRule struct{}
 
-	// Convert token address to Starknet format
-	tokenAddressHex := f.getStarknetTokenAddress(output)
-
-	// Get Starknet solver address from environment
-	starknetSolverAddr := os.Getenv("STARKNET_SOLVER_ADDRESS")
-	if starknetSolverAddr == "" {
-		return fmt.Errorf("STARKNET_SOLVER_ADDRESS environment variable not set")
-	}
-
-	// Check token balance on Starknet using direct RPC call
-	balance, err := f.getStarknetTokenBalance(chainConfig.RPCURL, tokenAddressHex, starknetSolverAddr)
-	if err != nil {
-		return fmt.Errorf("failed to get Starknet token balance: %w", err)
-	}
-
-	// Compare balance with required amount
-	if balance.Cmp(output.Amount) < 0 {
-		return fmt.Errorf("insufficient Starknet balance for token %s: have %s, need %s",
-			tokenAddressHex, balance.String(), output.Amount.String())
-	}
-
-	fmt.Printf("   ✅ Starknet Chain %d Token %s: Balance %s >= Required %s\n",
-		output.ChainID.Uint64(), tokenAddressHex, balance.String(), output.Amount.String())
-
-	return nil
+func (pr *ProfitabilityRule) Name() string {
+	return "ProfitabilityCheck"
 }
 
-// getStarknetTokenBalance retrieves token balance directly using RPC (without full StarknetSolver)
-func (f *Hyperlane7683Solver) getStarknetTokenBalance(rpcURL, tokenAddressHex, holderAddressHex string) (*big.Int, error) {
-	// Create a minimal provider just for balance checking
-	provider, err := rpc.NewProvider(rpcURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Starknet provider: %w", err)
+func (pr *ProfitabilityRule) Evaluate(ctx context.Context, args types.ParsedArgs) RuleResult {
+	// Calculate expected profit from the order
+	// This involves comparing MaxSpent vs MinReceived
+
+	if len(args.ResolvedOrder.MaxSpent) == 0 || len(args.ResolvedOrder.MinReceived) == 0 {
+		return RuleResult{Passed: false, Reason: "Missing MaxSpent or MinReceived data"}
 	}
 
-	// Convert addresses to felt format
-	tokenAddr, err := utils.HexToFelt(tokenAddressHex)
-	if err != nil {
-		return nil, fmt.Errorf("invalid token address: %w", err)
+	// Simple profitability check: ensure MinReceived > MaxSpent
+	// In a real implementation, this would be more sophisticated
+	// considering gas costs, slippage, etc.
+
+	// Get chain IDs for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+	logutil.CrossChainOperation("Checking order profitability", originChainID, destChainID, args.OrderID)
+
+	// Basic profitability check: ensure MinReceived > MaxSpent + expectedFees
+	// NOTE: This is a simplified check that assumes same token types and doesn't account for:
+	// - Token price differences (would need oracles)
+	// - Slippage and market conditions
+	// - Cross-chain value differences
+	//
+	// For production use, consider:
+	// - Integrating price oracles (Chainlink, etc.)
+	// - Using approved token allow lists with known price feeds
+	// - Implementing more sophisticated profit margin calculations
+	// - Accounting for actual gas costs and protocol fees
+	// - Adding minimum profit thresholds based on risk tolerance
+
+	// Expected fees and minimum profit threshold
+	// TODO: Calculate actual gas costs for fill + settle operations
+	// TODO: Add protocol fees (Hyperlane, etc.)
+	// TODO: Consider minimum profit threshold based on risk/reward
+	expectedFees := uint256.NewInt(0)       // Placeholder - should be calculated based on gas costs
+	minProfitThreshold := uint256.NewInt(0) // Placeholder - minimum profit to consider order worthwhile
+
+	// Calculate total MaxSpent (what we're spending)
+	totalMaxSpent := uint256.NewInt(0)
+	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
+		maxSpentU256, _ := uint256.FromBig(maxSpent.Amount)
+		totalMaxSpent.Add(totalMaxSpent, maxSpentU256)
 	}
 
-	holderAddr, err := utils.HexToFelt(holderAddressHex)
-	if err != nil {
-		return nil, fmt.Errorf("invalid holder address: %w", err)
+	// Calculate total MinReceived (what we expect to receive)
+	totalMinReceived := uint256.NewInt(0)
+	for _, minReceived := range args.ResolvedOrder.MinReceived {
+		minReceivedU256, _ := uint256.FromBig(minReceived.Amount)
+		totalMinReceived.Add(totalMinReceived, minReceivedU256)
 	}
 
-	// Call balanceOf function on the ERC20 contract
-	// balanceOf(address) -> uint256
-	// Starknet uses function name selectors, not hardcoded hex
-	balanceOfSelector := utils.GetSelectorFromNameFelt("balanceOf")
+	// Calculate total costs (MaxSpent + expected fees)
+	totalCosts := new(uint256.Int).Add(totalMaxSpent, expectedFees)
 
-	call := rpc.FunctionCall{
-		ContractAddress:    tokenAddr,
-		EntryPointSelector: balanceOfSelector,
-		Calldata:           []*felt.Felt{holderAddr},
+	// Basic check: MinReceived should be greater than total costs
+	if totalMinReceived.Cmp(totalCosts) <= 0 {
+		return RuleResult{
+			Passed: false,
+			Reason: fmt.Sprintf("Order not profitable: MinReceived (%s) <= TotalCosts (%s + %s fees)",
+				totalMinReceived.Dec(), totalMaxSpent.Dec(), expectedFees.Dec()),
+		}
 	}
 
-	result, err := provider.Call(context.Background(), call, rpc.BlockID{Tag: "latest"})
-	if err != nil {
-		return nil, fmt.Errorf("failed to call balanceOf: %w", err)
+	// Calculate gross profit (before fees) and net profit (after fees)
+	grossProfit := new(uint256.Int).Sub(totalMinReceived, totalMaxSpent)
+	netProfit := new(uint256.Int).Sub(totalMinReceived, totalCosts)
+
+	// Check if net profit meets minimum threshold
+	if netProfit.Cmp(minProfitThreshold) < 0 {
+		return RuleResult{
+			Passed: false,
+			Reason: fmt.Sprintf("Order profit below threshold: NetProfit (%s) < MinThreshold (%s)",
+				netProfit.Dec(), minProfitThreshold.Dec()),
+		}
 	}
 
-	if len(result) == 0 {
-		return nil, fmt.Errorf("balanceOf returned no results")
-	}
+	// Calculate profit margin for logging (based on gross profit vs MaxSpent)
+	profitMargin := new(uint256.Int).Mul(grossProfit, uint256.NewInt(100))
+	profitMargin.Div(profitMargin, totalMaxSpent)
 
-	// Convert felt result to big.Int
-	balance := utils.FeltToBigInt(result[0])
-	return balance, nil
+	logutil.CrossChainOperation(fmt.Sprintf("Profitability check passed: NetProfit=%s, GrossProfit=%s (%.2f%% margin)",
+		netProfit.Dec(), grossProfit.Dec(), float64(profitMargin.Uint64())), originChainID, destChainID, args.OrderID)
+
+	return RuleResult{Passed: true, Reason: fmt.Sprintf("Order profitable: NetProfit=%s, GrossProfit=%s (%.2f%% margin)",
+		netProfit.Dec(), grossProfit.Dec(), float64(profitMargin.Uint64()))}
 }
 
-// getStarknetTokenAddress converts EVM token address to Starknet format
-func (f *Hyperlane7683Solver) getStarknetTokenAddress(output types.Output) string {
-	// For Starknet destinations, use the token address directly
-	if f.isStarknetChain(output.ChainID) {
-		fmt.Printf("   🎯 Using Starknet token address: %s\n", output.Token)
-		return output.Token
+// Helper function to determine if a chain ID is Starknet
+func isStarknetChain(chainID uint64) bool {
+	for _, network := range config.Networks {
+		if network.ChainID == chainID && network.Name == starknetNetworkName {
+			return true
+		}
 	}
-
-	// For EVM destinations, convert to Starknet format if needed
-	fmt.Printf("   ⚠️  Using token address as-is: %s\n", output.Token)
-	return output.Token
+	return false
 }
 
-// FilterByTokenAndAmount validates that tokens and amounts are within allowed limits
-// Supports configurable per-chain, per-token limits (following TypeScript structure)
-func (f *Hyperlane7683Solver) filterByTokenAndAmount(args types.ParsedArgs, ctx *base.SolverContext) error {
-	// TODO: Make this configurable via metadata CustomRules
-	// For now, implement basic profitability check like TypeScript version
+// Helper function to get chain type (EVM or Starknet)
+// func getChainType(chainID uint64) string {
+//	if isStarknetChain(chainID) {
+//		return "Starknet"
+//	}
+//	return "EVM"
+// }
 
-	if len(args.ResolvedOrder.MinReceived) == 0 || len(args.ResolvedOrder.MaxSpent) == 0 {
-		return fmt.Errorf("invalid order: missing minReceived or maxSpent")
+// getStarknetChainID returns the chain ID for Starknet
+func getStarknetChainID() uint64 {
+	for _, network := range config.Networks {
+		if network.Name == starknetNetworkName {
+			return network.ChainID
+		}
 	}
-
-	minReceived := args.ResolvedOrder.MinReceived[0].Amount
-	maxSpent := args.ResolvedOrder.MaxSpent[0].Amount
-
-	// Basic profitability check - we should receive more than we spend
-	if minReceived.Cmp(maxSpent) <= 0 {
-		return fmt.Errorf("intent is not profitable: minReceived %s <= maxSpent %s",
-			minReceived.String(), maxSpent.String())
-	}
-
-	fmt.Printf("   ✅ Profitability check passed: profit = %s\n",
-		new(big.Int).Sub(minReceived, maxSpent).String())
-
-	return nil
-}
-
-// getTokenBalance retrieves the token balance for an address
-func (f *Hyperlane7683Solver) getTokenBalance(client *ethclient.Client, tokenAddr, holderAddr common.Address) (*big.Int, error) {
-	// Handle native token (ETH)
-	if tokenAddr == (common.Address{}) {
-		return client.BalanceAt(context.Background(), holderAddr, nil)
-	}
-
-	// Handle ERC20 tokens
-	balanceOfABI := `[{"type":"function","name":"balanceOf","inputs":[{"type":"address","name":"account"}],"outputs":[{"type":"uint256","name":""}],"stateMutability":"view"}]`
-	parsedABI, err := abi.JSON(strings.NewReader(balanceOfABI))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse balanceOf ABI: %w", err)
-	}
-
-	callData, err := parsedABI.Pack("balanceOf", holderAddr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to pack balanceOf call: %w", err)
-	}
-
-	result, err := client.CallContract(context.Background(), ethereum.CallMsg{To: &tokenAddr, Data: callData}, nil)
-	if err != nil {
-		return nil, fmt.Errorf("balanceOf call failed: %w", err)
-	}
-
-	if len(result) < 32 {
-		return nil, fmt.Errorf("invalid balanceOf result length: %d", len(result))
-	}
-
-	return new(big.Int).SetBytes(result), nil
+	return 0 // Default fallback
 }

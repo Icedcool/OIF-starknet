@@ -40,6 +40,7 @@ type SolverManager struct {
 	starknetClient  *rpc.Provider
 	activeShutdowns []func()
 	solverRegistry  SolverRegistry
+	allowBlockLists types.AllowBlockLists
 }
 
 // NewSolverManager creates a new solver manager
@@ -57,7 +58,22 @@ func NewSolverManager(cfg *config.Config) *SolverManager {
 		starknetClient:  nil, // Will be initialized later
 		activeShutdowns: make([]func(), 0),
 		solverRegistry:  registry,
+		allowBlockLists: types.AllowBlockLists{
+			AllowList: []types.AllowBlockListItem{},
+			BlockList: []types.AllowBlockListItem{},
+		},
 	}
+}
+
+// SetAllowBlockLists configures the allow/block lists for the solver manager
+// This allows runtime configuration of which orders to process
+func (sm *SolverManager) SetAllowBlockLists(allowBlockLists types.AllowBlockLists) {
+	sm.allowBlockLists = allowBlockLists
+}
+
+// GetAllowBlockLists returns the current allow/block lists configuration
+func (sm *SolverManager) GetAllowBlockLists() types.AllowBlockLists {
+	return sm.allowBlockLists
 }
 
 // InitializeSolvers starts all enabled solvers
@@ -233,6 +249,7 @@ func (sm *SolverManager) initializeHyperlane7683(ctx context.Context) error {
 		sm.GetStarknetClient, // Starknet client getter
 		sm.GetEVMSigner,      // EVM signer getter
 		sm.GetStarknetSigner, // Starknet signer getter
+		sm.allowBlockLists,   // Allow/block lists
 	)
 	hyperlane7683Solver.AddDefaultRules()
 

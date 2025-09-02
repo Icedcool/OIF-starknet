@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
+	"github.com/NethermindEth/oif-starknet/go/internal/logutil"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
 
 	"github.com/NethermindEth/starknet.go/account"
@@ -27,14 +28,17 @@ type Hyperlane7683Solver struct {
 	getStarknetClient func() (*rpc.Provider, error)
 	getEVMSigner      func(chainID uint64) (*bind.TransactOpts, error)
 	getStarknetSigner func() (*account.Account, error)
-	
+
 	// Chain handlers implementing ChainHandler interface - now per-chain
 	evmHandlers       map[uint64]ChainHandler // Map of chainID -> handler
 	evmHandlersMux    sync.RWMutex            // Protects evmHandlers map
 	hyperlaneStarknet ChainHandler
-	
+
+	// Allow/block lists for controlling which orders to process
+	allowBlockLists types.AllowBlockLists
+
 	// Metadata for this solver
-	metadata          types.Hyperlane7683Metadata
+	metadata types.Hyperlane7683Metadata
 }
 
 func NewHyperlane7683Solver(
@@ -42,6 +46,7 @@ func NewHyperlane7683Solver(
 	getStarknetClient func() (*rpc.Provider, error),
 	getEVMSigner func(chainID uint64) (*bind.TransactOpts, error),
 	getStarknetSigner func() (*account.Account, error),
+	allowBlockLists types.AllowBlockLists,
 ) *Hyperlane7683Solver {
 	metadata := types.Hyperlane7683Metadata{
 		BaseMetadata:  types.BaseMetadata{ProtocolName: "Hyperlane7683"},
@@ -55,16 +60,32 @@ func NewHyperlane7683Solver(
 		getEVMSigner:      getEVMSigner,
 		getStarknetSigner: getStarknetSigner,
 		evmHandlers:       make(map[uint64]ChainHandler),
+		allowBlockLists:   allowBlockLists,
 		metadata:          metadata,
 	}
 }
 
 func (f *Hyperlane7683Solver) ProcessIntent(ctx context.Context, args types.ParsedArgs) (bool, error) {
-	fmt.Printf("🔵 Processing Intent: %s-%s\n", f.metadata.ProtocolName, args.OrderID)
+	// Log the cross-chain operation
+	logutil.LogOrderProcessing(args, "Processing Order")
+
+	// Check allow/block lists first
+	if !f.isAllowedIntent(args) {
+		logutil.LogOperationComplete(args, "Order processing", false)
+		return false, fmt.Errorf("order blocked by allow/block lists")
+	}
+
+	// Run validation rules before processing
+	rulesEngine := NewRulesEngine()
+	if result := rulesEngine.EvaluateAll(ctx, args); !result.Passed {
+		logutil.LogOperationComplete(args, "Order validation", false)
+		return false, fmt.Errorf("order validation failed: %s", result.Reason)
+	}
 
 	// Fill method handles its own status checks efficiently (skip if already filled)
 	action, err := f.Fill(ctx, args)
 	if err != nil {
+		logutil.LogOperationComplete(args, "Fill execution", false)
 		return false, fmt.Errorf("fill execution failed: %w", err)
 	}
 
@@ -76,16 +97,17 @@ func (f *Hyperlane7683Solver) ProcessIntent(ctx context.Context, args types.Pars
 
 	// Always settle (regardless of whether we filled or skipped)
 	if err := f.SettleOrder(ctx, args); err != nil {
+		logutil.LogOperationComplete(args, "Order settlement", false)
 		return false, fmt.Errorf("order settlement failed: %w", err)
 	}
 
 	// Only return true when settle completes successfully
-	fmt.Printf("✅ Order processing completed successfully (fill + settle)\n")
+	logutil.LogOperationComplete(args, "Order processing", true)
 	return true, nil
 }
 
 func (f *Hyperlane7683Solver) Fill(ctx context.Context, args types.ParsedArgs) (OrderAction, error) {
-	fmt.Printf("🔵 Filling Intent: %s-%s\n", f.metadata.ProtocolName, args.OrderID)
+	logutil.LogOrderProcessing(args, "Filling Order")
 
 	if len(args.ResolvedOrder.FillInstructions) == 0 {
 		return OrderActionError, fmt.Errorf("no fill instructions found")
@@ -129,7 +151,7 @@ func (f *Hyperlane7683Solver) Fill(ctx context.Context, args types.ParsedArgs) (
 }
 
 func (f *Hyperlane7683Solver) SettleOrder(ctx context.Context, args types.ParsedArgs) error {
-	fmt.Printf("🔵 Settling Order: %s on destination chain\n", args.OrderID)
+	logutil.LogOrderProcessing(args, "Settling Order")
 
 	// Settlement happens on the destination chain - same as fill
 	if len(args.ResolvedOrder.FillInstructions) == 0 {
@@ -152,7 +174,7 @@ func (f *Hyperlane7683Solver) SettleOrder(ctx context.Context, args types.Parsed
 		}
 
 	case f.isEVMChain(instruction.DestinationChainID):
-		// Get or create EVM chain handler  
+		// Get or create EVM chain handler
 		handler, err := f.getEVMHandler(instruction.DestinationChainID)
 		if err != nil {
 			return fmt.Errorf("failed to get EVM handler for chain %s: %w", instruction.DestinationChainID.String(), err)
@@ -166,14 +188,14 @@ func (f *Hyperlane7683Solver) SettleOrder(ctx context.Context, args types.Parsed
 		return fmt.Errorf("unsupported destination chain: %s", instruction.DestinationChainID.String())
 	}
 
-	fmt.Printf("✅ Settlement successful for order %s\n", args.OrderID)
+	logutil.LogOperationComplete(args, "Settlement", true)
 	return nil
 }
 
 // getEVMHandler gets or creates an EVM chain handler for the given chain ID
 func (f *Hyperlane7683Solver) getEVMHandler(chainID *big.Int) (ChainHandler, error) {
 	chainIDUint := chainID.Uint64()
-	
+
 	// Check if handler already exists for this specific chain (read lock)
 	f.evmHandlersMux.RLock()
 	if handler, exists := f.evmHandlers[chainIDUint]; exists {
@@ -185,7 +207,7 @@ func (f *Hyperlane7683Solver) getEVMHandler(chainID *big.Int) (ChainHandler, err
 	// Create new EVM handler for this specific chain (write lock)
 	f.evmHandlersMux.Lock()
 	defer f.evmHandlersMux.Unlock()
-	
+
 	// Double-check in case another goroutine created it while we were waiting
 	if handler, exists := f.evmHandlers[chainIDUint]; exists {
 		return handler, nil
@@ -195,19 +217,20 @@ func (f *Hyperlane7683Solver) getEVMHandler(chainID *big.Int) (ChainHandler, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EVM client for chain %d: %w", chainIDUint, err)
 	}
-	
+
 	signer, err := f.getEVMSigner(chainIDUint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EVM signer for chain %d: %w", chainIDUint, err)
 	}
 
-	handler := NewHyperlaneEVM(client, signer)
+	handler := NewHyperlaneEVM(client, signer, chainIDUint)
 	f.evmHandlers[chainIDUint] = handler
-	fmt.Printf("   🔧 Created new EVM handler for chain %d\n", chainIDUint)
+	//networkName := logutil.NetworkNameByChainID(chainIDUint)
+	//logutil.LogWithNetworkTag(networkName, "   🔧 Created new EVM handler\n")
 	return handler, nil
 }
 
-// getStarknetHandler gets or creates a Starknet chain handler for the given chain ID  
+// getStarknetHandler gets or creates a Starknet chain handler for the given chain ID
 func (f *Hyperlane7683Solver) getStarknetHandler(chainID *big.Int) (ChainHandler, error) {
 	// Reuse existing handler if available
 	if f.hyperlaneStarknet != nil {
@@ -220,7 +243,7 @@ func (f *Hyperlane7683Solver) getStarknetHandler(chainID *big.Int) (ChainHandler
 		return nil, fmt.Errorf("starknet network not found for chain ID %s: %w", chainID.String(), err)
 	}
 
-	f.hyperlaneStarknet = NewHyperlaneStarknet(chainConfig.RPCURL)
+	f.hyperlaneStarknet = NewHyperlaneStarknet(chainConfig.RPCURL, chainConfig.ChainID)
 	return f.hyperlaneStarknet, nil
 }
 
@@ -256,6 +279,56 @@ func (f *Hyperlane7683Solver) isEVMChain(chainID *big.Int) bool {
 			return !strings.Contains(strings.ToLower(networkName), "starknet")
 		}
 	}
+	return false
+}
+
+// isAllowedIntent checks if an intent is allowed based on allow/block lists
+func (f *Hyperlane7683Solver) isAllowedIntent(args types.ParsedArgs) bool {
+	// Check block list first
+	for _, blockItem := range f.allowBlockLists.BlockList {
+		if f.matchesAllowBlockItem(blockItem, args) {
+			return false
+		}
+	}
+
+	// If no allow list is specified, allow everything
+	if len(f.allowBlockLists.AllowList) == 0 {
+		return true
+	}
+
+	// Check allow list
+	for _, allowItem := range f.allowBlockLists.AllowList {
+		if f.matchesAllowBlockItem(allowItem, args) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// matchesAllowBlockItem checks if args match an allow/block list item
+func (f *Hyperlane7683Solver) matchesAllowBlockItem(item types.AllowBlockListItem, args types.ParsedArgs) bool {
+	// Check sender address
+	if item.SenderAddress != "*" && item.SenderAddress != args.SenderAddress {
+		return false
+	}
+
+	// Check recipients
+	for _, recipient := range args.Recipients {
+		// Check destination domain
+		if item.DestinationDomain != "*" && item.DestinationDomain != recipient.DestinationChainName {
+			continue
+		}
+
+		// Check recipient address
+		if item.RecipientAddress != "*" && item.RecipientAddress != recipient.RecipientAddress {
+			continue
+		}
+
+		// If we get here, this recipient matches
+		return true
+	}
+
 	return false
 }
 

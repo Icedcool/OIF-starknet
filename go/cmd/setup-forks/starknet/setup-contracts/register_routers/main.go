@@ -199,10 +199,7 @@ func mustEnv(k string) string {
 	return v
 }
 
-func feltFromBytes(b []byte) *felt.Felt {
-	bi := new(big.Int).SetBytes(b)
-	return utils.BigIntToFelt(bi)
-}
+
 
 func evmAddrToBytes32(addr20 []byte) (out [32]byte) { copy(out[12:], addr20); return }
 

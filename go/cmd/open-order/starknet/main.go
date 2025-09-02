@@ -46,7 +46,7 @@ func loadNetworks() error {
 	}
 
 	// Check FORKING mode for address loading
-	//forkingStr := strings.ToLower(getEnvWithDefault("FORKING", "true"))
+	// forkingStr := strings.ToLower(getEnvWithDefault("FORKING", "true"))
 	//isForking, _ := strconv.ParseBool(forkingStr)
 
 	//	if isForking {
@@ -89,7 +89,7 @@ func loadNetworks() error {
 	}
 
 	//// If neither mode loaded addresses successfully, try fallback to legacy files
-	//if networks[0].hyperlaneAddress == "" {
+	// if networks[0].hyperlaneAddress == "" {
 	//	fmt.Printf("   ⚠️ Fallback: Trying legacy per-file state\n")
 	//	for i, network := range networks {
 	//		if network.name == starknetNetworkName {
@@ -113,7 +113,7 @@ func loadNetworks() error {
 }
 
 //// loadHyperlaneAddress loads the Hyperlane7683 address from deployment file
-//func loadHyperlaneAddress() (string, error) {
+// func loadHyperlaneAddress() (string, error) {
 //	// Try multiple possible paths
 //	paths := []string{
 //		"state/network_state/starknet-sepolia-deployment.json",
@@ -139,7 +139,7 @@ func loadNetworks() error {
 //}
 
 // loadTokenAddresses loads token addresses from deployment file
-//func loadTokenAddresses() ([]TokenInfo, error) {
+// func loadTokenAddresses() ([]TokenInfo, error) {
 //	// Try multiple possible paths
 //	paths := []string{
 //		"state/network_state/starknet-mock-erc20-deployment.json",
@@ -619,7 +619,7 @@ func getOrderDataTypeHashU256() (low *felt.Felt, high *felt.Felt) {
 
 func encodeOrderData(orderData OrderData) []*felt.Felt {
 	//// Log the input values for debugging
-	//fmt.Printf("   🧪 OrderData Input Debug:\n")
+	// fmt.Printf("   🧪 OrderData Input Debug:\n")
 	//fmt.Printf("     • sender: %s\n", orderData.Sender.String())
 	//fmt.Printf("     • recipient: %s\n", orderData.Recipient.String())
 	//fmt.Printf("     • input_token: %s\n", orderData.InputToken.String())
@@ -749,21 +749,7 @@ func encodeOrderData(orderData OrderData) []*felt.Felt {
 	return bytesStruct
 }
 
-// toU256 converts a big.Int to low and high felt values for u256 representation
-func toU256(num *big.Int) (low, high *felt.Felt) {
-	// Create a mask for the lower 128 bits
-	mask := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 128), big.NewInt(1))
 
-	// Extract low and high parts
-	lowBigInt := new(big.Int).And(num, mask)
-	highBigInt := new(big.Int).Rsh(num, 128)
-
-	// Convert to felt
-	lowFelt := utils.BigIntToFelt(lowBigInt)
-	highFelt := utils.BigIntToFelt(highBigInt)
-
-	return lowFelt, highFelt
-}
 
 func calculateOrderId(orderData OrderData) string {
 	// Generate a simple order ID for now
@@ -808,58 +794,7 @@ func getTokenBalanceFromRPC(client rpc.RpcProvider, tokenAddress, userAddress st
 	return balanceBigInt, nil
 }
 
-// getTokenAllowance gets the allowance of a token for a specific spender using RPC
-func getTokenAllowanceFromRPC(client rpc.RpcProvider, tokenAddress, ownerAddress, spenderAddress string) (*big.Int, error) {
-	// Convert addresses to felt
-	tokenAddrFelt, err := utils.HexToFelt(tokenAddress)
-	if err != nil {
-		return nil, fmt.Errorf("invalid token address: %w", err)
-	}
 
-	ownerAddrFelt, err := utils.HexToFelt(ownerAddress)
-	if err != nil {
-		return nil, fmt.Errorf("invalid owner address: %w", err)
-	}
-
-	spenderAddrFelt, err := utils.HexToFelt(spenderAddress)
-	if err != nil {
-		return nil, fmt.Errorf("invalid spender address: %w", err)
-	}
-
-	// Build the allowance function call
-	allowanceCall := rpc.FunctionCall{
-		ContractAddress:    tokenAddrFelt,
-		EntryPointSelector: utils.GetSelectorFromNameFelt("allowance"),
-		Calldata:           []*felt.Felt{ownerAddrFelt, spenderAddrFelt},
-	}
-
-	// Call the contract to get allowance
-	resp, err := client.Call(context.Background(), allowanceCall, rpc.WithBlockTag("latest"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to call allowance: %w", err)
-	}
-
-	if len(resp) < 2 {
-		return nil, fmt.Errorf("insufficient response from allowance call: expected 2 values for u256, got %d", len(resp))
-	}
-
-	// For u256, the response should be [low, high] where:
-	// - low contains the first 128 bits
-	// - high contains the remaining 128 bits
-	lowFelt := resp[0]
-	highFelt := resp[1]
-
-	// Convert low and high felts to big.Ints
-	lowBigInt := utils.FeltToBigInt(lowFelt)
-	highBigInt := utils.FeltToBigInt(highFelt)
-
-	// Combine low and high into a single u256 value
-	// high << 128 + low
-	shiftedHigh := new(big.Int).Lsh(highBigInt, 128)
-	totalAllowance := new(big.Int).Add(shiftedHigh, lowBigInt)
-
-	return totalAllowance, nil
-}
 
 // verifyBalanceChanges verifies that opening an order actually transferred tokens using RPC
 func verifyBalanceChangesFromRPC(client rpc.RpcProvider, tokenAddress, userAddress string, initialBalance, expectedTransferAmount *big.Int) error {

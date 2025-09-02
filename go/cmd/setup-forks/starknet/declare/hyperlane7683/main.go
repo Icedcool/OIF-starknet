@@ -169,11 +169,4 @@ func saveDeclarationInfo(txHash, classHash, networkName string) {
 	fmt.Printf("💾 Declaration info saved to %s\n", filename)
 }
 
-// sanitizeNetworkName converts a human network name to a safe slug
-func sanitizeNetworkName(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	s = strings.ReplaceAll(s, " ", "-")
-	s = strings.ReplaceAll(s, "/", "-")
-	s = strings.ReplaceAll(s, "_", "-")
-	return s
-}
+

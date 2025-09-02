@@ -40,15 +40,7 @@ func getEnvUint64(key string, defaultValue uint64) uint64 {
 	return defaultValue
 }
 
-// getEnvAny returns the first non-empty env value among keys, or defaultValue
-func getEnvAny(keys []string, defaultValue string) string {
-	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
-			return v
-		}
-	}
-	return defaultValue
-}
+
 
 // getEnvUint64Any returns the first present uint64 among keys, or defaultValue
 func getEnvUint64Any(keys []string, defaultValue uint64) uint64 {

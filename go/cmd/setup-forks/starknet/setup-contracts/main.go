@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+
 	"fmt"
 	"math/big"
 	"os"
@@ -18,14 +18,6 @@ import (
 
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
 )
-
-// getEnvWithDefault gets an environment variable with a default fallback
-func getEnvWithDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
 
 // Token deployment info structure
 type TokenDeploymentInfo struct {
@@ -192,33 +184,8 @@ func main() {
 	fmt.Printf("   • Ready for cross-chain operations!\n")
 }
 
-// loadTokenDeploymentInfo loads token deployment information from file
-func loadTokenDeploymentInfo(networkName string) ([]TokenInfo, error) {
-	// Try to read from deployment file
-	deploymentFile := "mock_erc20_deployment_starknet.json"
 
-	// Check if deployment file exists
-	if _, err := os.Stat(deploymentFile); os.IsNotExist(err) {
-		// Try the default deployment file
-		if _, err := os.Stat(DeploymentFilePath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("no deployment file found. Please run deploy-mock-erc20 first")
-		}
-		deploymentFile = DeploymentFilePath
-	}
 
-	// Read and parse deployment file
-	data, err := os.ReadFile(deploymentFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read deployment file %s: %w", deploymentFile, err)
-	}
-
-	var deployment TokenDeploymentInfo
-	if err := json.Unmarshal(data, &deployment); err != nil {
-		return nil, fmt.Errorf("failed to parse deployment file %s: %w", deploymentFile, err)
-	}
-
-	return deployment.Tokens, nil
-}
 
 // fundUsers funds test users with DogCoin tokens using the mint function
 func fundUsers(accnt *account.Account, dogCoin TokenInfo, aliceAddr, solverAddr string) error {
@@ -338,36 +305,7 @@ func mintTokens(accnt *account.Account, tokenAddress, recipient, amount, tokenNa
 	return nil
 }
 
-// getHyperlaneAddress gets the Hyperlane contract address for the network
-func getHyperlaneAddress(networkName string) (string, error) {
-	// Try to read from deployment file
-	deploymentFile := "state/deployment/starknet-hyperlane7683-deployment.json"
 
-	// Check if deployment file exists
-	if _, err := os.Stat(deploymentFile); os.IsNotExist(err) {
-		return "", fmt.Errorf("Hyperlane7683 deployment file not found: %s", deploymentFile)
-	}
-
-	// Read and parse deployment file
-	data, err := os.ReadFile(deploymentFile)
-	if err != nil {
-		return "", fmt.Errorf("failed to read deployment file %s: %w", deploymentFile, err)
-	}
-
-	var deployment struct {
-		DeployedAddress string `json:"deployedAddress"`
-	}
-	if err := json.Unmarshal(data, &deployment); err != nil {
-		return "", fmt.Errorf("failed to parse deployment file %s: %w", deploymentFile, err)
-	}
-
-	if deployment.DeployedAddress == "" {
-		return "", fmt.Errorf("no deployed address found in deployment file")
-	}
-
-	fmt.Printf("   📋 Found Hyperlane7683 at: %s\n", deployment.DeployedAddress)
-	return deployment.DeployedAddress, nil
-}
 
 // getTokenBalance gets the balance of a token for a specific address
 func getTokenBalance(accnt *account.Account, tokenAddress, userAddress, tokenName string) (*big.Int, error) {

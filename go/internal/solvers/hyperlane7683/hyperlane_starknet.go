@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
+	"github.com/NethermindEth/oif-starknet/go/internal/logutil"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
+	"github.com/NethermindEth/oif-starknet/go/pkg/starknetutil"
 
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/starknet.go/account"
@@ -34,13 +36,14 @@ type HyperlaneStarknet struct {
 	// Signer
 	account    *account.Account
 	solverAddr *felt.Felt
+	chainID    uint64
 
 	// hyperlaneAddr *felt.Felt
 	mu sync.Mutex // Serialize operations to prevent nonce conflicts
 }
 
 // NewHyperlaneStarknet creates a new Starknet handler for Hyperlane operations
-func NewHyperlaneStarknet(rpcURL string) *HyperlaneStarknet {
+func NewHyperlaneStarknet(rpcURL string, chainID uint64) *HyperlaneStarknet {
 	provider, err := rpc.NewProvider(rpcURL)
 	if err != nil {
 		fmt.Printf("failed to create Starknet provider: %v", err)
@@ -79,6 +82,7 @@ func NewHyperlaneStarknet(rpcURL string) *HyperlaneStarknet {
 		account:    acct,
 		provider:   provider,
 		solverAddr: addrF,
+		chainID:    chainID,
 	}
 }
 
@@ -108,7 +112,8 @@ func (h *HyperlaneStarknet) Fill(ctx context.Context, args types.ParsedArgs) (Or
 		fmt.Printf("   ⚠️  Status check failed: %v\n", err)
 		return OrderActionError, err
 	}
-	fmt.Printf("   📊 Order status check: %s\n", status)
+	networkName := logutil.NetworkNameByChainID(h.chainID)
+	logutil.LogStatusCheck(networkName, 1, 1, status, "UNKNOWN")
 	if status == "FILLED" {
 		fmt.Printf("⏭️  Order already filled, proceeding to settlement\n")
 		return OrderActionSettle, nil
@@ -128,10 +133,10 @@ func (h *HyperlaneStarknet) Fill(ctx context.Context, args types.ParsedArgs) (Or
 	// - Origin data: 1 felt for size (usize), 1 felt for length (usize), 1 felt for each element
 	// - Filler data: 1 felt for size (usize), 1 felt for length (usize), 0 elements
 	originData := instruction.OriginData
-	words := bytesToU128Felts(originData)
+	words := starknetutil.BytesToU128Felts(originData)
 
 	// Convert bytes32 representation of orderID to u256 (2 felts)
-	orderIDLow, orderIDHigh, err := convertSolidityOrderIDForStarknet(orderID)
+	orderIDLow, orderIDHigh, err := starknetutil.ConvertSolidityOrderIDForStarknet(orderID)
 	if err != nil {
 		return OrderActionError, fmt.Errorf("failed to convert solidity order ID for starknet: %w", err)
 	}
@@ -149,14 +154,17 @@ func (h *HyperlaneStarknet) Fill(ctx context.Context, args types.ParsedArgs) (Or
 	if err != nil {
 		return OrderActionError, fmt.Errorf("starknet fill send failed: %w", err)
 	}
-	fmt.Printf("   🚀 Starknet fill transaction sent: %s\n", tx.Hash.String())
+	// Get chain IDs for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	destChainID := instruction.DestinationChainID.Uint64()
+	logutil.CrossChainOperation(fmt.Sprintf("Fill transaction sent: %s", tx.Hash.String()), originChainID, destChainID, orderID)
 
 	// Wait for confirmation
 	_, waitErr := h.account.WaitForTransactionReceipt(ctx, tx.Hash, 2*time.Second)
 	if waitErr != nil {
 		return OrderActionError, fmt.Errorf("starknet fill wait failed: %w", waitErr)
 	}
-	fmt.Printf("   ✅ Starknet fill transaction confirmed\n")
+	logutil.CrossChainOperation("Fill transaction confirmed", originChainID, destChainID, orderID)
 
 	return OrderActionSettle, nil
 }
@@ -181,10 +189,10 @@ func (h *HyperlaneStarknet) Settle(ctx context.Context, args types.ParsedArgs) e
 		return fmt.Errorf("failed to convert destination settler to felt: %w", err)
 	}
 
-	// Pre-settle check: ensure order is FILLED
-	status, err := h.GetOrderStatus(ctx, args)
+	// Pre-settle check: ensure order is FILLED with retry logic
+	status, err := h.waitForOrderStatus(ctx, args, "FILLED", 5, 2*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to get order status: %w", err)
+		return fmt.Errorf("failed to get order status after retries: %w", err)
 	}
 	if status != "FILLED" {
 		return fmt.Errorf("order status must be filled in order to settle, got: %s", status)
@@ -196,7 +204,10 @@ func (h *HyperlaneStarknet) Settle(ctx context.Context, args types.ParsedArgs) e
 		return fmt.Errorf("failed to get origin domain: %w", err)
 	}
 
-	fmt.Printf("   💰 Quoting gas payment for origin domain: %d\n", originDomain)
+	// Get chain IDs for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+	logutil.CrossChainOperation(fmt.Sprintf("Quoting gas payment for origin domain: %d", originDomain), originChainID, destChainID, args.OrderID)
 	gasPayment, err := h.quoteGasPayment(ctx, originDomain, destinationSettler)
 	if err != nil {
 		return fmt.Errorf("failed to quote gas payment: %w", err)
@@ -206,14 +217,14 @@ func (h *HyperlaneStarknet) Settle(ctx context.Context, args types.ParsedArgs) e
 	if err := h.ensureETHApproval(ctx, gasPayment, destinationSettler); err != nil {
 		return fmt.Errorf("ETH approval failed for settlement gas: %w", err)
 	}
-	fmt.Printf("   ✅ ETH approved for settlement gas payment: %s wei\n", gasPayment.String())
+	logutil.CrossChainOperation(fmt.Sprintf("ETH approved for settlement gas payment: %s wei", gasPayment.String()), originChainID, destChainID, args.OrderID)
 
 	// Prepare calldata
-	orderIDLow, orderIDHigh, err := convertSolidityOrderIDForStarknet(orderID)
+	orderIDLow, orderIDHigh, err := starknetutil.ConvertSolidityOrderIDForStarknet(orderID)
 	if err != nil {
 		return fmt.Errorf("failed to convert solidity order ID for starknet: %w", err)
 	}
-	gasLow, gasHigh := convertBigIntToU256Felts(gasPayment)
+	gasLow, gasHigh := starknetutil.ConvertBigIntToU256Felts(gasPayment)
 	calldata := []*felt.Felt{
 		utils.Uint64ToFelt(1),   // order ID array length
 		orderIDLow, orderIDHigh, // order ID (u256) low and high
@@ -233,13 +244,13 @@ func (h *HyperlaneStarknet) Settle(ctx context.Context, args types.ParsedArgs) e
 		return fmt.Errorf("starknet settle send failed: %w", err)
 	}
 
-	fmt.Printf("   🔄 Starknet settle tx sent: %s\n", tx.Hash.String())
+	logutil.CrossChainOperation(fmt.Sprintf("Starknet settle tx sent: %s", tx.Hash.String()), originChainID, destChainID, args.OrderID)
 	_, waitErr := h.account.WaitForTransactionReceipt(ctx, tx.Hash, 2*time.Second)
 	if waitErr != nil {
 		return fmt.Errorf("starknet settle wait failed: %w", waitErr)
 	}
 
-	fmt.Printf("   ✅ Starknet settle transaction confirmed\n")
+	logutil.CrossChainOperation("Starknet settle transaction confirmed", originChainID, destChainID, args.OrderID)
 	return nil
 }
 
@@ -258,7 +269,7 @@ func (h *HyperlaneStarknet) GetOrderStatus(ctx context.Context, args types.Parse
 	}
 
 	// Convert order ID to cairo u256
-	orderIDLow, orderIDHigh, err := convertSolidityOrderIDForStarknet(args.OrderID)
+	orderIDLow, orderIDHigh, err := starknetutil.ConvertSolidityOrderIDForStarknet(args.OrderID)
 	if err != nil {
 		return "UNKNOWN", fmt.Errorf("failed to convert solidity order id for cairo: %w", err)
 	}
@@ -297,13 +308,15 @@ func (h *HyperlaneStarknet) setupApprovals(ctx context.Context, args types.Parse
 		return nil
 	}
 
-	fmt.Printf("   🔍 Setting up Starknet token approvals for fill\n")
-
 	// Get destination chain ID from fill instruction
 	if len(args.ResolvedOrder.FillInstructions) == 0 {
 		return fmt.Errorf("no fill instructions found")
 	}
 	destinationChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+	
+	// Get origin chain ID for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	logutil.CrossChainOperation("Setting up token approvals", originChainID, destinationChainID, args.OrderID)
 
 	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
 		// Skip native ETH (empty string)
@@ -324,7 +337,7 @@ func (h *HyperlaneStarknet) setupApprovals(ctx context.Context, args types.Parse
 		}
 	}
 
-	fmt.Printf("   🔍 Set Starknet token approvals for fill\n")
+	logutil.CrossChainOperation("Set token approvals", originChainID, destinationChainID, args.OrderID)
 
 	return nil
 }
@@ -495,45 +508,41 @@ func (h *HyperlaneStarknet) ensureTokenApproval(ctx context.Context, tokenHex st
 	return nil
 }
 
-// convertSolidityOrderIDForStarknet converts a Solidity-style orderID (bytes32) into the low and high felts of a Starknet u256 orderID
-// Note: Assigns the left 16 bytes to the high felt and the right 16 bytes to the low felt
-func convertSolidityOrderIDForStarknet(orderID string) (low *felt.Felt, high *felt.Felt, err error) {
-	orderBytes := utils.HexToBN(orderID).Bytes()
-	if len(orderBytes) < 32 {
-		pad := make([]byte, 32-len(orderBytes))
-		orderBytes = append(pad, orderBytes...)
-	}
-
-	left16 := utils.BigIntToFelt(new(big.Int).SetBytes(orderBytes[0:16]))
-	right16 := utils.BigIntToFelt(new(big.Int).SetBytes(orderBytes[16:32]))
-
-	low = right16
-	high = left16
-
-	return low, high, nil
-}
-
-// convertBigIntToU256Felts converts a big.Int to two felts, one for the low 128 bits and one for the high 128 bits
-func convertBigIntToU256Felts(value *big.Int) (low *felt.Felt, high *felt.Felt) {
-	lowerMask := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 128), big.NewInt(1))
-	low = utils.BigIntToFelt(new(big.Int).And(value, lowerMask))
-	high = utils.BigIntToFelt(new(big.Int).Rsh(value, 128))
-	return low, high
-}
-
-// bytesToU128Felts converts bytes to u128 felts for Cairo
-func bytesToU128Felts(b []byte) []*felt.Felt {
-	words := make([]*felt.Felt, 0, (len(b)+15)/16)
-	for i := 0; i < len(b); i += 16 {
-		end := i + 16
-		chunk := make([]byte, 16)
-		if end > len(b) {
-			copy(chunk, b[i:])
+// waitForOrderStatus waits for the order status to become the expected value with retry logic
+func (h *HyperlaneStarknet) waitForOrderStatus(ctx context.Context, args types.ParsedArgs, expectedStatus string, maxRetries int, initialDelay time.Duration) (string, error) {
+	delay := initialDelay
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		status, err := h.GetOrderStatus(ctx, args)
+		if err != nil {
+			fmt.Printf("   ⚠️  Status check attempt %d failed: %v\n", attempt, err)
 		} else {
-			copy(chunk, b[i:end])
+			fmt.Printf("   📊 Status check attempt %d: %s (expected: %s)\n", attempt, status, expectedStatus)
+			if status == expectedStatus {
+				return status, nil
+			}
 		}
-		// Keep big-endian u128 words; Cairo decoders reconstruct bytes in order
-		words = append(words, utils.BigIntToFelt(new(big.Int).SetBytes(chunk)))
+		
+		// Don't wait after the last attempt
+		if attempt < maxRetries {
+			fmt.Printf("   ⏳ Waiting %v before retry %d/%d...\n", delay, attempt+1, maxRetries)
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(delay):
+				// Exponential backoff: double the delay for next attempt
+				delay *= 2
+			}
+		}
 	}
-	return words
+	
+	// Final attempt to get the current status
+	finalStatus, err := h.GetOrderStatus(ctx, args)
+	if err != nil {
+		return "UNKNOWN", fmt.Errorf("final status check failed after %d attempts: %w", maxRetries, err)
+	}
+	
+	return finalStatus, nil
 }
+
+

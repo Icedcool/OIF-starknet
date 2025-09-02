@@ -17,9 +17,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/NethermindEth/oif-starknet/go/internal/config"
 	contracts "github.com/NethermindEth/oif-starknet/go/internal/contracts"
+	"github.com/NethermindEth/oif-starknet/go/internal/logutil"
 	"github.com/NethermindEth/oif-starknet/go/internal/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -31,16 +33,18 @@ import (
 
 // HyperlaneEVM contains all EVM-specific logic for the Hyperlane7683 protocol
 type HyperlaneEVM struct {
-	client *ethclient.Client
-	signer *bind.TransactOpts
-	mu     sync.Mutex // Serialize operations to prevent nonce conflicts
+	client  *ethclient.Client
+	signer  *bind.TransactOpts
+	chainID uint64
+	mu      sync.Mutex // Serialize operations to prevent nonce conflicts
 }
 
 // NewHyperlaneEVM creates a new EVM handler for Hyperlane operations
-func NewHyperlaneEVM(client *ethclient.Client, signer *bind.TransactOpts) *HyperlaneEVM {
+func NewHyperlaneEVM(client *ethclient.Client, signer *bind.TransactOpts, chainID uint64) *HyperlaneEVM {
 	return &HyperlaneEVM{
-		client: client,
-		signer: signer,
+		client:  client,
+		signer:  signer,
+		chainID: chainID,
 	}
 }
 
@@ -72,7 +76,11 @@ func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs) (OrderAc
 		fmt.Printf("   ⚠️  Status check failed: %v\n", err)
 		return OrderActionError, err
 	}
-	fmt.Printf("   📊 Order status check: %s\n", status)
+	
+	// Get network name for logging
+	networkName := logutil.NetworkNameByChainID(h.chainID)
+	logutil.LogStatusCheck(networkName, 1, 1, status, "UNKNOWN")
+	
 	if status == "FILLED" {
 		fmt.Printf("⏭️  Order already filled, proceeding to settlement\n")
 		return OrderActionSettle, nil
@@ -88,7 +96,10 @@ func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs) (OrderAc
 	}
 
 	// Execute the fill transaction
-	fmt.Printf("   🔄 Executing fill call to contract %s\n", destinationSettlerAddr.Hex())
+	// Get chain IDs for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	destChainID := instruction.DestinationChainID.Uint64()
+	logutil.CrossChainOperation(fmt.Sprintf("Executing fill call to contract %s", destinationSettlerAddr.Hex()), originChainID, destChainID, args.OrderID)
 
 	// Set native token value if needed
 	originalValue := h.signer.Value
@@ -108,7 +119,7 @@ func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs) (OrderAc
 		return OrderActionError, fmt.Errorf("fill transaction failed: %w", err)
 	}
 
-	fmt.Printf("   🚀 Fill transaction sent: %s\n", tx.Hash().Hex())
+	logutil.CrossChainOperation(fmt.Sprintf("Fill transaction sent: %s", tx.Hash().Hex()), originChainID, destChainID, args.OrderID)
 
 	// Wait for confirmation
 	receipt, err := bind.WaitMined(ctx, h.client, tx)
@@ -117,7 +128,7 @@ func (h *HyperlaneEVM) Fill(ctx context.Context, args types.ParsedArgs) (OrderAc
 	}
 
 	if receipt.Status == 1 {
-		fmt.Printf("   ✅ EVM Fill successful! Gas used: %d\n", receipt.GasUsed)
+		logutil.CrossChainOperation(fmt.Sprintf("EVM Fill successful! Gas used: %d", receipt.GasUsed), originChainID, destChainID, args.OrderID)
 		return OrderActionSettle, nil // Need to settle this order
 	} else {
 		return OrderActionError, fmt.Errorf("fill transaction failed with status: %d", receipt.Status)
@@ -146,10 +157,10 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 		return fmt.Errorf("failed to convert destination settler to EVM address: %w", err)
 	}
 
-	// Pre-settle check: ensure order is FILLED
-	status, err := h.GetOrderStatus(ctx, args)
+	// Pre-settle check: ensure order is FILLED with retry logic
+	status, err := h.waitForOrderStatus(ctx, args, "FILLED", 5, 2*time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to get order status: %w", err)
+		return fmt.Errorf("failed to get order status after retries: %w", err)
 	}
 	if status != "FILLED" {
 		return fmt.Errorf("order status must be filled in order to settle, got: %s", status)
@@ -192,7 +203,10 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 		}
 	}
 
-	fmt.Printf("   💰 Quoting gas payment for origin domain: %d\n", originDomain)
+	// Get chain IDs for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+	logutil.CrossChainOperation(fmt.Sprintf("Quoting gas payment for origin domain: %d", originDomain), originChainID, destChainID, args.OrderID)
 	gasPayment, err := contract.QuoteGasPayment(&bind.CallOpts{Context: ctx}, originDomain)
 	if err != nil {
 		return fmt.Errorf("quoteGasPayment failed on %s: %w", destinationSettler, err)
@@ -220,7 +234,7 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 	if err != nil {
 		return fmt.Errorf("settle tx failed on %s: %w", destinationSettler, err)
 	}
-	fmt.Printf("   📊 Settle transaction sent: %s\n", tx.Hash().Hex())
+	logutil.CrossChainOperation(fmt.Sprintf("Settle transaction sent: %s", tx.Hash().Hex()), originChainID, destChainID, args.OrderID)
 
 	// Wait for confirmation
 	receipt, err := bind.WaitMined(ctx, h.client, tx)
@@ -232,7 +246,7 @@ func (h *HyperlaneEVM) Settle(ctx context.Context, args types.ParsedArgs) error 
 		return fmt.Errorf("settle transaction failed on %s at block %d", destinationSettler, receipt.BlockNumber)
 	}
 
-	fmt.Printf("   ✅ Settle transaction confirmed at block %d (gasUsed=%d)\n", receipt.BlockNumber, receipt.GasUsed)
+	logutil.CrossChainOperation(fmt.Sprintf("Settle transaction confirmed at block %d (gasUsed=%d)", receipt.BlockNumber, receipt.GasUsed), originChainID, destChainID, args.OrderID)
 	return nil
 }
 
@@ -310,13 +324,15 @@ func (h *HyperlaneEVM) setupApprovals(ctx context.Context, args types.ParsedArgs
 		return nil
 	}
 
-	fmt.Printf("   🔄 Setting up EVM token approvals for fill\n")
-
 	// Get destination chain ID from fill instruction
 	if len(args.ResolvedOrder.FillInstructions) == 0 {
 		return fmt.Errorf("no fill instructions found")
 	}
 	destinationChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
+	
+	// Get origin chain ID for cross-chain logging
+	originChainID := args.ResolvedOrder.OriginChainID.Uint64()
+	logutil.CrossChainOperation("Setting up token approvals", originChainID, destinationChainID, args.OrderID)
 
 	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
 		// Skip native ETH (empty string)
@@ -341,7 +357,7 @@ func (h *HyperlaneEVM) setupApprovals(ctx context.Context, args types.ParsedArgs
 			return fmt.Errorf("approval failed for token %s: %w", maxSpent.Token, err)
 		}
 	}
-	fmt.Printf("   ✅ EVM token approvals set for fill\n")
+	logutil.CrossChainOperation("EVM token approvals set", originChainID, destinationChainID, args.OrderID)
 
 	return nil
 }
@@ -467,4 +483,43 @@ func (h *HyperlaneEVM) ensureTokenApproval(ctx context.Context, tokenAddr, spend
 
 	fmt.Printf("   ✅ Approval confirmed! Gas used: %d\n", receipt.GasUsed)
 	return nil
+}
+
+// waitForOrderStatus waits for the order status to become the expected value with retry logic
+func (h *HyperlaneEVM) waitForOrderStatus(ctx context.Context, args types.ParsedArgs, expectedStatus string, maxRetries int, initialDelay time.Duration) (string, error) {
+	delay := initialDelay
+	
+	networkName := logutil.NetworkNameByChainID(h.chainID)
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		status, err := h.GetOrderStatus(ctx, args)
+		if err != nil {
+			fmt.Printf("   ⚠️  Status check attempt %d failed: %v\n", attempt, err)
+		} else {
+			logutil.LogStatusCheck(networkName, attempt, maxRetries, status, expectedStatus)
+			if status == expectedStatus {
+				return status, nil
+			}
+		}
+		
+		// Don't wait after the last attempt
+		if attempt < maxRetries {
+			logutil.LogRetryWait(networkName, attempt, maxRetries, delay.String())
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(delay):
+				// Exponential backoff: double the delay for next attempt
+				delay *= 2
+			}
+		}
+	}
+	
+	// Final attempt to get the current status
+	finalStatus, err := h.GetOrderStatus(ctx, args)
+	if err != nil {
+		return "UNKNOWN", fmt.Errorf("final status check failed after %d attempts: %w", maxRetries, err)
+	}
+	
+	return finalStatus, nil
 }

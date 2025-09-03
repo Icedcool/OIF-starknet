@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/NethermindEth/oif-starknet/go/pkg/ethutil"
+	"github.com/NethermindEth/oif-starknet/go/pkg/starknetutil"
 	"github.com/NethermindEth/oif-starknet/go/solvercore/config"
 	"github.com/NethermindEth/oif-starknet/go/solvercore/logutil"
 	"github.com/NethermindEth/oif-starknet/go/solvercore/types"
-	"github.com/NethermindEth/oif-starknet/go/pkg/ethutil"
-	"github.com/NethermindEth/oif-starknet/go/pkg/starknetutil"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -85,24 +85,19 @@ func (br *BalanceRule) Evaluate(ctx context.Context, args types.ParsedArgs) Rule
 		return RuleResult{Passed: true, Reason: "No tokens to spend"}
 	}
 
-	// Determine if this is an EVM or Starknet order based on destination chain
+	// Get destination chain ID for routing
 	destinationChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
 
-	// Check if destination is Starknet
-	if isStarknetChain(destinationChainID) {
+	// Switch based on destination chain type
+	switch {
+	case isStarknetChain(destinationChainID):
 		return br.checkStarknetBalance(ctx, args)
+	default:
+		return br.checkEVMBalance(ctx, args)
 	}
-
-	// Check EVM chains (ETH, ARB, OPT, BASE)
-	return br.checkEVMBalance(ctx, args)
 }
 
 func (br *BalanceRule) checkStarknetBalance(ctx context.Context, args types.ParsedArgs) RuleResult {
-	// Get chain IDs for cross-chain logging
-	//originChainID := args.ResolvedOrder.OriginChainID.Uint64()
-	//destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
-	//logutil.CrossChainOperation("Checking Starknet balances", originChainID, destChainID, args.OrderID)
-
 	// Get solver's Starknet address from environment
 	solverAddrHex := os.Getenv("STARKNET_SOLVER_ADDRESS")
 	if solverAddrHex == "" {
@@ -120,20 +115,16 @@ func (br *BalanceRule) checkStarknetBalance(ctx context.Context, args types.Pars
 		return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to create Starknet provider: %v", err)}
 	}
 
-	// Check balance for each token in MaxSpent
+	// Check balance for each token in MaxSpent (what solver needs to provide on Starknet)
 	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
 		// Skip native ETH (empty string)
-		if maxSpent.Token == "" {
+		if maxSpent.Token == "" || maxSpent.Token == "0x0" {
 			continue
 		}
 
-		// Check if this token belongs to Starknet chain
-		if maxSpent.ChainID.Uint64() != getStarknetChainID() {
-			continue
-		}
-
+		// Use starknetutil for balance check (assume valid input from order creation)
 		balance, err := starknetutil.ERC20Balance(provider, maxSpent.Token, solverAddrHex)
-	if err != nil {
+		if err != nil {
 			return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to check balance for token %s: %v", maxSpent.Token, err)}
 		}
 
@@ -141,20 +132,12 @@ func (br *BalanceRule) checkStarknetBalance(ctx context.Context, args types.Pars
 			return RuleResult{Passed: false, Reason: fmt.Sprintf("Insufficient balance for token %s: have %s, need %s",
 				maxSpent.Token, balance.String(), maxSpent.Amount.String())}
 		}
-
-		fmt.Printf("   ✅ Token %s balance sufficient: %s >= %s\n",
-			maxSpent.Token, balance.String(), maxSpent.Amount.String())
 	}
 
 	return RuleResult{Passed: true, Reason: "Starknet balance check passed"}
 }
 
 func (br *BalanceRule) checkEVMBalance(ctx context.Context, args types.ParsedArgs) RuleResult {
-	// Get chain IDs for cross-chain logging
-	//originChainID := args.ResolvedOrder.OriginChainID.Uint64()
-	//destChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
-	//logutil.CrossChainOperation("Checking EVM balances", originChainID, destChainID, args.OrderID)
-
 	// Get solver's EVM address from environment
 	solverAddrHex := os.Getenv("SOLVER_PUB_KEY")
 	if solverAddrHex == "" {
@@ -162,11 +145,9 @@ func (br *BalanceRule) checkEVMBalance(ctx context.Context, args types.ParsedArg
 	}
 
 	solverAddr := common.HexToAddress(solverAddrHex)
-
-	// Get destination chain ID to determine which EVM RPC to use
 	destinationChainID := args.ResolvedOrder.FillInstructions[0].DestinationChainID.Uint64()
 
-	// Find the network config for this chain
+	// Find the network config for destination chain
 	var networkConfig *config.NetworkConfig
 	for _, network := range config.Networks {
 		if network.ChainID == destinationChainID {
@@ -179,26 +160,27 @@ func (br *BalanceRule) checkEVMBalance(ctx context.Context, args types.ParsedArg
 		return RuleResult{Passed: false, Reason: fmt.Sprintf("No network config found for chain ID %d", destinationChainID)}
 	}
 
-	// Connect to EVM RPC
+	// Connect to destination chain RPC
 	client, err := ethclient.Dial(networkConfig.RPCURL)
 	if err != nil {
 		return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to connect to EVM RPC: %v", err)}
 	}
 	defer client.Close()
 
-	// Check balance for each token in MaxSpent
+	// Check balance for each token in MaxSpent (what solver needs to provide on destination chain)
 	for _, maxSpent := range args.ResolvedOrder.MaxSpent {
 		// Skip native ETH (empty string)
 		if maxSpent.Token == "" {
 			continue
 		}
 
-		// Check if this token belongs to this EVM chain
-		if maxSpent.ChainID.Uint64() != destinationChainID {
-			continue
+		// Convert token address using address_utils (assume valid input from order creation)
+		tokenAddr, err := types.ToEVMAddress(maxSpent.Token)
+		if err != nil {
+			return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to convert token address %s: %v", maxSpent.Token, err)}
 		}
 
-		tokenAddr := common.HexToAddress(maxSpent.Token)
+		// Use ethutil for balance check
 		balance, err := ethutil.ERC20Balance(client, tokenAddr, solverAddr)
 		if err != nil {
 			return RuleResult{Passed: false, Reason: fmt.Sprintf("Failed to check balance for token %s: %v", maxSpent.Token, err)}
@@ -208,9 +190,6 @@ func (br *BalanceRule) checkEVMBalance(ctx context.Context, args types.ParsedArg
 			return RuleResult{Passed: false, Reason: fmt.Sprintf("Insufficient balance for token %s: have %s, need %s",
 				maxSpent.Token, balance.String(), maxSpent.Amount.String())}
 		}
-
-		fmt.Printf("   ✅ Token %s balance sufficient: %s >= %s\n",
-			maxSpent.Token, balance.String(), maxSpent.Amount.String())
 	}
 
 	return RuleResult{Passed: true, Reason: "EVM balance check passed"}
@@ -231,7 +210,7 @@ func (pr *ProfitabilityRule) Evaluate(ctx context.Context, args types.ParsedArgs
 		return RuleResult{Passed: false, Reason: "Missing MaxSpent or MinReceived data"}
 	}
 
-	// Simple profitability check: ensure MinReceived > MaxSpent
+	// Simple profitability check: ensure MaxSpent > MinReceived
 	// In a real implementation, this would be more sophisticated
 	// considering gas costs, slippage, etc.
 
@@ -277,7 +256,7 @@ func (pr *ProfitabilityRule) Evaluate(ctx context.Context, args types.ParsedArgs
 	// Calculate total costs (MaxSpent + expected fees)
 	totalCosts := new(uint256.Int).Add(totalMaxSpent, expectedFees)
 
-	// Basic check: MinReceived should be greater than total costs
+	// Basic check: MinReceived should be greater than TotalCosts (solver profit > 0)
 	if totalMinReceived.Cmp(totalCosts) <= 0 {
 		return RuleResult{
 			Passed: false,
@@ -337,3 +316,5 @@ func getStarknetChainID() uint64 {
 	}
 	return 0 // Default fallback
 }
+
+

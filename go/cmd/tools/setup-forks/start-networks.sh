@@ -37,11 +37,20 @@ reset_solver_state() {
 	STATE_FILE="$STATE_DIR/solver-state.json"
 
 	# Get values from environment variables with defaults
-	ETHEREUM_SOLVER_BLOCK=${ETHEREUM_SOLVER_START_BLOCK:-8319000}
-	OPTIMISM_SOLVER_BLOCK=${OPTIMISM_SOLVER_START_BLOCK:-27370000}
-	ARBITRUM_SOLVER_BLOCK=${ARBITRUM_SOLVER_START_BLOCK:-138020000}
-	BASE_SOLVER_BLOCK=${BASE_SOLVER_START_BLOCK:-25380000}
-	STARKNET_SOLVER_BLOCK=${STARKNET_SOLVER_START_BLOCK:-1770800}
+	# Use conditional logic: if FORKING=true, use LOCAL_* variables, otherwise use regular variables
+	if [ "$FORKING" = "true" ]; then
+		ETHEREUM_SOLVER_BLOCK=${LOCAL_ETHEREUM_SOLVER_START_BLOCK:-9121214}
+		OPTIMISM_SOLVER_BLOCK=${LOCAL_OPTIMISM_SOLVER_START_BLOCK:-32529526}
+		ARBITRUM_SOLVER_BLOCK=${LOCAL_ARBITRUM_SOLVER_START_BLOCK:-190326088}
+		BASE_SOLVER_BLOCK=${LOCAL_BASE_SOLVER_START_BLOCK:-30546661}
+		STARKNET_SOLVER_BLOCK=${LOCAL_STARKNET_SOLVER_START_BLOCK:-1850850}
+	else
+		ETHEREUM_SOLVER_BLOCK=${ETHEREUM_SOLVER_START_BLOCK:-0}
+		OPTIMISM_SOLVER_BLOCK=${OPTIMISM_SOLVER_START_BLOCK:-0}
+		ARBITRUM_SOLVER_BLOCK=${ARBITRUM_SOLVER_START_BLOCK:-0}
+		BASE_SOLVER_BLOCK=${BASE_SOLVER_START_BLOCK:-0}
+		STARKNET_SOLVER_BLOCK=${STARKNET_SOLVER_START_BLOCK:-0}
+	fi
 
 	# Create the solver state JSON with only last indexed blocks
 	# Note: All addresses and chain IDs now come from .env file via config package
@@ -127,24 +136,45 @@ start_network() {
 	fi
 
 	# Fork from block when contract was last active to preserve state
+	# Use conditional logic: if FORKING=true, use LOCAL_* variables, otherwise use regular variables
 	local fork_block
-	case $testnet_name in
-	"sepolia")
-		fork_block=${ETHEREUM_SOLVER_START_BLOCK:-8319000} # SolverStartBlock - 1
-		;;
-	"optimism-sepolia")
-		fork_block=${OPTIMISM_SOLVER_START_BLOCK:-27370000} # SolverStartBlock - 1
-		;;
-	"arbitrum-sepolia")
-		fork_block=${ARBITRUM_SOLVER_START_BLOCK:-138020000} # SolverStartBlock - 1
-		;;
-	"base-sepolia")
-		fork_block=${BASE_SOLVER_START_BLOCK:-25380000} # SolverStartBlock - 1
-		;;
-	*)
-		fork_block=${ETHEREUM_SOLVER_START_BLOCK:-8319000}
-		;;
-	esac
+	if [ "$FORKING" = "true" ]; then
+		case $testnet_name in
+		"sepolia")
+			fork_block=${LOCAL_ETHEREUM_SOLVER_START_BLOCK:-9121214} # SolverStartBlock - 1
+			;;
+		"optimism-sepolia")
+			fork_block=${LOCAL_OPTIMISM_SOLVER_START_BLOCK:-32529526} # SolverStartBlock - 1
+			;;
+		"arbitrum-sepolia")
+			fork_block=${LOCAL_ARBITRUM_SOLVER_START_BLOCK:-190326088} # SolverStartBlock - 1
+			;;
+		"base-sepolia")
+			fork_block=${LOCAL_BASE_SOLVER_START_BLOCK:-30546661} # SolverStartBlock - 1
+			;;
+		*)
+			fork_block=${LOCAL_ETHEREUM_SOLVER_START_BLOCK:-9121214}
+			;;
+		esac
+	else
+		case $testnet_name in
+		"sepolia")
+			fork_block=${ETHEREUM_SOLVER_START_BLOCK:-0} # SolverStartBlock - 1
+			;;
+		"optimism-sepolia")
+			fork_block=${OPTIMISM_SOLVER_START_BLOCK:-0} # SolverStartBlock - 1
+			;;
+		"arbitrum-sepolia")
+			fork_block=${ARBITRUM_SOLVER_START_BLOCK:-0} # SolverStartBlock - 1
+			;;
+		"base-sepolia")
+			fork_block=${BASE_SOLVER_START_BLOCK:-0} # SolverStartBlock - 1
+			;;
+		*)
+			fork_block=${ETHEREUM_SOLVER_START_BLOCK:-0}
+			;;
+		esac
+	fi
 	echo -e "${color}${id}${RESET} Forking ${testnet_name} from block ${fork_block} (SolverStartBlock - 1)"
 
 	# Start anvil with testnet fork and pipe output through color filter
@@ -185,7 +215,13 @@ start_starknet() {
 	fi
 
 	# Start Katana with state forking (SolverStartBlock - 1)
-	local fork_block=${STARKNET_SOLVER_START_BLOCK:-1530000}
+	# Use conditional logic: if FORKING=true, use LOCAL_* variables, otherwise use regular variables
+	local fork_block
+	if [ "$FORKING" = "true" ]; then
+		fork_block=${LOCAL_STARKNET_SOLVER_START_BLOCK:-1850850}
+	else
+		fork_block=${STARKNET_SOLVER_START_BLOCK:-0}
+	fi
 	katana --chain-id $STARKNET_SOLVER_START_BLOCK --fork.provider "$rpc_url" --fork.block ${fork_block} 2>&1 | while IFS= read -r line; do
 		if [ "${LOG_LEVEL:-info}" = "debug" ]; then
 			echo -e "${color}${id}${RESET} $line"

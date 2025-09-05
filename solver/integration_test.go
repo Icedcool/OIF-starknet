@@ -709,7 +709,7 @@ func TestSolverIntegration(t *testing.T) {
 	// Disable parallel execution to prevent test interference
 	// Note: Go tests run in parallel by default, but we need sequential execution
 	// for integration tests to prevent state interference
-	
+
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -855,21 +855,21 @@ func testOrderCreationOnly(t *testing.T, solverPath string, orderCommand []strin
 func cleanSolverStateOnce(t *testing.T) {
 	// Remove only old/corrupted solver state files, but keep the main state file
 	stateFiles := []string{
-		"solver-state.json",  // Old file in current directory
-		"solvercore/solvers/hyperlane7683/solver-state.json",  // Old file in solver directory
+		"solver-state.json", // Old file in current directory
+		"solvercore/solvers/hyperlane7683/solver-state.json", // Old file in solver directory
 	}
-	
+
 	for _, file := range stateFiles {
 		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 			t.Logf("⚠️  Could not remove %s: %v", file, err)
 		}
 	}
-	
+
 	// Create clean state directory if it doesn't exist
 	if err := os.MkdirAll("state/solver_state", 0755); err != nil {
 		t.Logf("⚠️  Could not create state directory: %v", err)
 	}
-	
+
 	// Set all solver start blocks to -1 (one block before current) for integration tests
 	// This prevents the solver from processing historical orders while still detecting new orders
 	os.Setenv("ETHEREUM_SOLVER_START_BLOCK", "-1")
@@ -877,14 +877,14 @@ func cleanSolverStateOnce(t *testing.T) {
 	os.Setenv("ARBITRUM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("BASE_SOLVER_START_BLOCK", "-1")
 	os.Setenv("STARKNET_SOLVER_START_BLOCK", "-1")
-	
+
 	// Also set LOCAL_ versions for forking mode
 	os.Setenv("LOCAL_ETHEREUM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_OPTIMISM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_ARBITRUM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_BASE_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_STARKNET_SOLVER_START_BLOCK", "-1")
-	
+
 	t.Log("✅ Solver state cleaned once and start blocks set to -1 (one block before current)")
 }
 
@@ -895,18 +895,18 @@ func cleanSolverState(t *testing.T) {
 		"state/solver_state/solver-state.json",
 		"solver-state.json",
 	}
-	
+
 	for _, file := range stateFiles {
 		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 			t.Logf("⚠️  Could not remove %s: %v", file, err)
 		}
 	}
-	
+
 	// Create clean state directory
 	if err := os.MkdirAll("state/solver_state", 0755); err != nil {
 		t.Logf("⚠️  Could not create state directory: %v", err)
 	}
-	
+
 	// Set all solver start blocks to -1 (one block before current) for integration tests
 	// This prevents the solver from processing historical orders while still detecting new orders
 	os.Setenv("ETHEREUM_SOLVER_START_BLOCK", "-1")
@@ -914,14 +914,14 @@ func cleanSolverState(t *testing.T) {
 	os.Setenv("ARBITRUM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("BASE_SOLVER_START_BLOCK", "-1")
 	os.Setenv("STARKNET_SOLVER_START_BLOCK", "-1")
-	
+
 	// Also set LOCAL_ versions for forking mode
 	os.Setenv("LOCAL_ETHEREUM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_OPTIMISM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_ARBITRUM_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_BASE_SOLVER_START_BLOCK", "-1")
 	os.Setenv("LOCAL_STARKNET_SOLVER_START_BLOCK", "-1")
-	
+
 	t.Log("✅ Solver state cleaned and start blocks set to -1 (one block before current)")
 }
 
@@ -1022,7 +1022,7 @@ func testCompleteOrderLifecycle(t *testing.T, solverPath string, orderCommand []
 
 	// Step 6: Run the solver to fill the order
 	t.Log("🤖 Step 6: Running solver to fill the order...")
-	
+
 	// Add a small delay to ensure the order is detected by the solver
 	t.Log("⏳ Waiting 2 seconds for order to be detected...")
 	time.Sleep(2 * time.Second)
@@ -1075,7 +1075,7 @@ func testCompleteOrderLifecycle(t *testing.T, solverPath string, orderCommand []
 	select {
 	case err = <-done:
 		// Process completed normally
-	case <-time.After(200 * time.Second):
+	case <-time.After(100 * time.Second):
 		// Force kill if still running after 60 seconds
 		t.Log("🔪 Force killing solver after timeout...")
 		if solverCmd.Process != nil {

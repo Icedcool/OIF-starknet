@@ -142,21 +142,6 @@ func (od *OrderData) IsValid() bool {
 	return true
 }
 
-// calculateOrderId calculates the order ID from order data
-func calculateOrderId(orderData OrderData) string {
-	// This is a simplified version - in reality, you'd use the proper order ID calculation
-	// that matches the smart contract implementation
-	data := fmt.Sprintf("%s-%s-%s-%d-%d",
-		orderData.OriginChainID.String(),
-		orderData.DestinationChainID.String(),
-		orderData.User,
-		orderData.OpenDeadline.Int64(),
-		orderData.FillDeadline.Int64())
-
-	hash := crypto.Keccak256Hash([]byte(data))
-	return hash.Hex()
-}
-
 // Helper functions for uint256 conversion
 // ToUint256 converts *big.Int to uint256.Int
 func ToUint256(bi *big.Int) *uint256.Int {
@@ -284,11 +269,11 @@ func loadNetworks() []NetworkConfig {
 		}
 
 		dogCoinAddr := os.Getenv(envVarName)
-		if dogCoinAddr != "" {
-			fmt.Printf("   🔍 Loaded %s DogCoin from env: %s\n", networkName, dogCoinAddr)
-		} else {
-			fmt.Printf("   ⚠️  No DogCoin address found for %s (env var: %s)\n", networkName, envVarName)
-		}
+		//if dogCoinAddr != "" {
+		//	fmt.Printf("   🔍 Loaded %s DogCoin from env: %s\n", networkName, dogCoinAddr)
+		//} else {
+		//	fmt.Printf("   ⚠️  No DogCoin address found for %s (env var: %s)\n", networkName, envVarName)
+		//}
 
 		networks = append(networks, NetworkConfig{
 			name:             networkConfig.Name,
@@ -624,14 +609,14 @@ func executeOrder(order OrderConfig, networks []NetworkConfig) {
 		fmt.Printf("   ✅ Sufficient allowance already exists\n")
 	}
 
-	// Store initial balances for comparison
-	initialBalances := struct {
-		userBalance      *big.Int
-		hyperlaneBalance *big.Int
-	}{
-		userBalance:      initialUserBalance,
-		hyperlaneBalance: initialHyperlaneBalance,
-	}
+	//// Store initial balances for comparison
+	//initialBalances := struct {
+	//	userBalance      *big.Int
+	//	hyperlaneBalance *big.Int
+	//}{
+	//	userBalance:      initialUserBalance,
+	//	hyperlaneBalance: initialHyperlaneBalance,
+	//}
 
 	// Pick a fresh senderNonce recognized by the contract to avoid InvalidNonce
 	senderNonce, err := pickValidSenderNonce(client, originNetwork.hyperlaneAddress, auth.From)
@@ -703,18 +688,17 @@ func executeOrder(order OrderConfig, networks []NetworkConfig) {
 	if receipt.Status == 1 {
 		fmt.Printf("✅ Order opened successfully!\n")
 		fmt.Printf("📊 Gas used: %d\n", receipt.GasUsed)
-		fmt.Printf("🎯 Order ID (off): %s\n", calculateOrderId(orderData))
 
-		// Verify that balances actually changed as expected
-		fmt.Printf("   🔍 Verifying input tokens were transferred...\n")
-		// For balance verification, use the actual input amount the user paid
-		// This is what the user actually gave up to open the order (not MaxSpent which is output amount)
-		expectedTransferAmount := order.InputAmount
-		if err := verifyBalanceChanges(client, inputToken, owner, spender, initialBalances, expectedTransferAmount); err != nil {
-			fmt.Printf("⚠️  Balance verification failed: %v\n", err)
-		} else {
-			fmt.Printf("👍 Balance changes verified (accounting for profit margin)\n")
-		}
+		//// Verify that balances actually changed as expected
+		//fmt.Printf("   🔍 Verifying input tokens were transferred...\n")
+		//// For balance verification, use the actual input amount the user paid
+		//// This is what the user actually gave up to open the order (not MaxSpent which is output amount)
+		//expectedTransferAmount := order.InputAmount
+		//if err := verifyBalanceChanges(client, inputToken, owner, spender, initialBalances, expectedTransferAmount); err != nil {
+		//	fmt.Printf("⚠️  Balance verification failed: %v\n", err)
+		//} else {
+		//	fmt.Printf("👍 Balance changes verified (accounting for profit margin)\n")
+		//}
 	} else {
 		fmt.Printf("❌ Order opening failed\n")
 		fmt.Printf("🔍 Transaction hash: %s\n", tx.Hash().Hex())

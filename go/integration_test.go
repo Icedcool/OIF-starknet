@@ -293,8 +293,7 @@ func testOrderCreationWithBalanceVerification(t *testing.T, solverPath string, c
 
 	// Step 1: Get all network balances BEFORE order creation
 	t.Log("📊 Step 1: Getting all network balances BEFORE order creation...")
-	beforeBalances, err := getAllNetworkBalances()
-	require.NoError(t, err)
+	beforeBalances := getAllNetworkBalances()
 
 	// Log all before balances
 	t.Log("📋 Before balances:")
@@ -336,8 +335,7 @@ func testOrderCreationWithBalanceVerification(t *testing.T, solverPath string, c
 
 	// Step 4: Get all network balances AFTER order creation
 	t.Log("📊 Step 4: Getting all network balances AFTER order creation...")
-	afterBalances, err := getAllNetworkBalances()
-	require.NoError(t, err)
+	afterBalances := getAllNetworkBalances()
 
 	// Log all after balances
 	t.Log("📋 After balances:")
@@ -371,7 +369,7 @@ type OrderInfo struct {
 }
 
 // getAllNetworkBalances gets Alice's DogCoin balance and Hyperlane contract balance for all networks
-func getAllNetworkBalances() (*NetworkBalances, error) {
+func getAllNetworkBalances() *NetworkBalances {
 	balances := &NetworkBalances{
 		AliceBalances:     make(map[string]*big.Int),
 		HyperlaneBalances: make(map[string]*big.Int),
@@ -398,7 +396,7 @@ func getAllNetworkBalances() (*NetworkBalances, error) {
 		balances.HyperlaneBalances[networkName] = hyperlaneBalance
 	}
 
-	return balances, nil
+	return balances
 }
 
 // getAliceDogCoinBalance gets Alice's DogCoin balance for a specific network
@@ -757,8 +755,7 @@ func testOrderCreationOnly(t *testing.T, solverPath string, orderCommand []strin
 
 	// Step 1: Get all network balances BEFORE order creation
 	t.Log("📊 Step 1: Getting all network balances BEFORE order creation...")
-	beforeOrderBalances, err := getAllNetworkBalances()
-	require.NoError(t, err)
+	beforeOrderBalances := getAllNetworkBalances()
 
 	// Log all before balances
 	t.Log("📋 Before order creation balances:")
@@ -804,8 +801,7 @@ func testOrderCreationOnly(t *testing.T, solverPath string, orderCommand []strin
 
 	// Step 5: Get all network balances AFTER order creation
 	t.Log("📊 Step 5: Getting all network balances AFTER order creation...")
-	afterOrderBalances, err := getAllNetworkBalances()
-	require.NoError(t, err)
+	afterOrderBalances := getAllNetworkBalances()
 
 	// Debug: Log balance changes
 	t.Log("🔍 Balance changes after order creation:")
@@ -850,8 +846,7 @@ func testCompleteOrderLifecycle(t *testing.T, solverPath string, orderCommand []
 
 	// Step 1: Get all network balances BEFORE order creation
 	t.Log("📊 Step 1: Getting all network balances BEFORE order creation...")
-	beforeOrderBalances, err := getAllNetworkBalances()
-	require.NoError(t, err)
+	beforeOrderBalances := getAllNetworkBalances()
 
 	// Log all before balances
 	t.Log("📋 Before order creation balances:")
@@ -1015,8 +1010,7 @@ func testCompleteOrderLifecycle(t *testing.T, solverPath string, orderCommand []
 
 	// Step 8: Get final balances AFTER fill and settle
 	t.Log("📊 Step 8: Getting final balances AFTER fill and settle...")
-	finalAliceBalances, err := getAllNetworkBalances()
-	require.NoError(t, err)
+	finalAliceBalances := getAllNetworkBalances()
 
 	finalSolverBalances, err := getSolverBalances()
 	require.NoError(t, err)
@@ -1326,57 +1320,6 @@ func verifyCompleteLifecycleBalanceChanges(t *testing.T, beforeOrder, finalAlice
 		outputAmount.String(), orderInfo.DestinationChain)
 }
 
-// verifySolverExecutionBalanceChanges verifies that only the destination chain balances changed during solver execution
-func verifySolverExecutionBalanceChanges(t *testing.T, beforeSolver, afterSolver *SolverBalances, beforeOrder, afterOrder *NetworkBalances, orderInfo *OrderInfo) {
-	t.Logf("🔍 Verifying solver execution balance changes for order: %s -> %s", orderInfo.OriginChain, orderInfo.DestinationChain)
-
-	// Check that only the destination chain solver balance decreased
-	for networkName, beforeBalance := range beforeSolver.Balances {
-		afterBalance := afterSolver.Balances[networkName]
-
-		if networkName == orderInfo.DestinationChain {
-			// Destination chain solver balance should have decreased (solver provided tokens to Alice)
-			if afterBalance.Cmp(beforeBalance) >= 0 {
-				t.Logf("⚠️  Destination chain (%s) solver balance unchanged (likely replenished in same transaction)", networkName)
-			} else {
-				solverDecrease := new(big.Int).Sub(beforeBalance, afterBalance)
-				t.Logf("✅ Destination chain (%s) solver balance decreased by: %s", networkName, solverDecrease.String())
-			}
-		} else {
-			// Other chains should have unchanged solver balance
-			if beforeBalance.Cmp(afterBalance) != 0 {
-				t.Errorf("❌ Non-destination chain (%s) solver balance should be unchanged: before=%s, after=%s",
-					networkName, beforeBalance.String(), afterBalance.String())
-			} else {
-				t.Logf("✅ Non-destination chain (%s) solver balance unchanged: %s", networkName, beforeBalance.String())
-			}
-		}
-	}
-
-	// Check that only the destination chain Alice balance increased
-	for networkName, beforeBalance := range beforeOrder.AliceBalances {
-		afterBalance := afterOrder.AliceBalances[networkName]
-
-		if networkName == orderInfo.DestinationChain {
-			// Destination chain Alice balance should have increased (Alice received tokens from solver)
-			if afterBalance.Cmp(beforeBalance) <= 0 {
-				t.Errorf("❌ Destination chain (%s) Alice balance should have increased: before=%s, after=%s",
-					networkName, beforeBalance.String(), afterBalance.String())
-			} else {
-				aliceIncrease := new(big.Int).Sub(afterBalance, beforeBalance)
-				t.Logf("✅ Destination chain (%s) Alice balance increased by: %s", networkName, aliceIncrease.String())
-			}
-		} else {
-			// Other chains should have unchanged Alice balance
-			if beforeBalance.Cmp(afterBalance) != 0 {
-				t.Errorf("❌ Non-destination chain (%s) Alice balance should be unchanged: before=%s, after=%s",
-					networkName, beforeBalance.String(), afterBalance.String())
-			} else {
-				t.Logf("✅ Non-destination chain (%s) Alice balance unchanged: %s", networkName, beforeBalance.String())
-			}
-		}
-	}
-}
 
 // TestMain sets up the test environment
 func TestMain(m *testing.M) {

@@ -175,7 +175,7 @@ func TestHyperlane7683Concurrency(t *testing.T) {
 		// Test concurrent solver creation
 		done := make(chan bool, 10)
 		for i := 0; i < 10; i++ {
-			go func(index int) {
+			go func(_ int) {
 				solver := &Hyperlane7683Solver{
 					metadata: types.Hyperlane7683Metadata{
 						BaseMetadata: types.BaseMetadata{

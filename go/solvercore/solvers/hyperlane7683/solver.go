@@ -51,7 +51,7 @@ func NewHyperlane7683Solver(
 	metadata := types.Hyperlane7683Metadata{
 		BaseMetadata:  types.BaseMetadata{ProtocolName: "Hyperlane7683"},
 		IntentSources: []types.IntentSource{},
-		CustomRules:   types.CustomRules{},
+		CustomRules:   types.CustomRules{Rules: []types.RuleConfig{}},
 	}
 
 	return &Hyperlane7683Solver{
@@ -60,6 +60,8 @@ func NewHyperlane7683Solver(
 		getEVMSigner:      getEVMSigner,
 		getStarknetSigner: getStarknetSigner,
 		evmHandlers:       make(map[uint64]ChainHandler),
+		evmHandlersMux:    sync.RWMutex{},
+		hyperlaneStarknet: nil, // Will be created when needed
 		allowBlockLists:   allowBlockLists,
 		metadata:          metadata,
 	}

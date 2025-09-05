@@ -126,7 +126,7 @@ func testERC20Functions(t *testing.T, client *ethclient.Client, networkName stri
 }
 
 // Helper functions
-func getAliceAddressForNetwork(networkName string, useLocalForks bool) (string, error) {
+func getAliceAddressForNetwork(_ string, useLocalForks bool) (string, error) {
 	if useLocalForks {
 		address := os.Getenv("LOCAL_ALICE_PUB_KEY")
 		if address == "" {

@@ -311,12 +311,3 @@ func isStarknetChain(chainID uint64) bool {
 //	return "EVM"
 // }
 
-// getStarknetChainID returns the chain ID for Starknet
-func getStarknetChainID() uint64 {
-	for _, network := range config.Networks {
-		if network.Name == starknetNetworkName {
-			return network.ChainID
-		}
-	}
-	return 0 // Default fallback
-}

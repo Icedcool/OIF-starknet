@@ -54,7 +54,7 @@ func TestRuleInterface(t *testing.T) {
 
 	t.Run("Rule with error", func(t *testing.T) {
 		expectedError := assert.AnError
-		rule := func(args types.ParsedArgs, context *SolverContext) error {
+		rule := func(_ types.ParsedArgs, _ *SolverContext) error {
 			return expectedError
 		}
 

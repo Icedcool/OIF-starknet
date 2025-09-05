@@ -368,7 +368,7 @@ func (h *HyperlaneEVM) setupApprovals(ctx context.Context, args types.ParsedArgs
 	return nil
 }
 
-func (h *HyperlaneEVM) interpretStatusHash(ctx context.Context, statusHash common.Hash) string {
+func (h *HyperlaneEVM) interpretStatusHash(_ context.Context, statusHash common.Hash) string {
 	if statusHash == (common.Hash{}) {
 		return "UNKNOWN"
 	}

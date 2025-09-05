@@ -262,7 +262,7 @@ func TestEthUtilConcurrency(t *testing.T) {
 		// Test concurrent private key parsing
 		done := make(chan bool, 10)
 		for i := 0; i < 10; i++ {
-			go func(index int) {
+			go func(_ int) {
 				privateKey, err := crypto.GenerateKey()
 				require.NoError(t, err)
 

@@ -94,15 +94,16 @@ func TestConnection() {
 			logrus.Errorf("   ❌ Failed to connect to %s: %v", networkName, err)
 			continue
 		}
-		defer client.Close()
 
 		chainID, err := client.ChainID(context.Background())
 		if err != nil {
 			logrus.Errorf("   ❌ Failed to get chain ID for %s: %v", networkName, err)
+			client.Close() // Close immediately on error
 			continue
 		}
 
 		logrus.Infof("   ✅ %s connected (Chain ID: %s)", networkName, chainID.String())
+		client.Close() // Close immediately after successful test
 	}
 
 	logrus.Info("🎉 Network connection test completed")

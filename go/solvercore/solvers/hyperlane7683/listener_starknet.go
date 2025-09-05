@@ -78,15 +78,15 @@ func NewStarknetListener(listenerConfig *base.ListenerConfig, rpcURL string) (ba
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current block for negative start block: %w", err)
 		}
-		
+
 		// Calculate start block: current - abs(configStartBlock)
 		resolvedStartBlock = currentBlock - uint64(-configStartBlock)
-		
+
 		// Ensure we don't go below block 0
 		if resolvedStartBlock > currentBlock {
 			resolvedStartBlock = 0
 		}
-		
+
 		fmt.Printf("%s📚 Start block was %d, using current block %d - %d = %d\n",
 			logutil.Prefix(listenerConfig.ChainName), configStartBlock, currentBlock, -configStartBlock, resolvedStartBlock)
 	}
@@ -102,7 +102,7 @@ func NewStarknetListener(listenerConfig *base.ListenerConfig, rpcURL string) (ba
 		// Use the HIGHER of the two values - this respects updated .env values
 		// while also respecting any actual progress that's been saved
 		if deploymentStateBlock > resolvedStartBlock {
-			
+
 			lastProcessedBlock = deploymentStateBlock
 			fmt.Printf("%s📚 Using saved progress LastIndexedBlock: %d (config wants %d)\n",
 				logutil.Prefix(listenerConfig.ChainName), lastProcessedBlock, resolvedStartBlock)
@@ -415,7 +415,7 @@ func decodeResolvedOrderFromFelts(data []*felt.Felt) (types.ResolvedCrossChainOr
 		}
 
 		// Build EVM origin_data bytes (ABI-compatible, 448 bytes total)
-		                evmOriginData := make([]byte, 0, evmOriginDataSize)
+		evmOriginData := make([]byte, 0, evmOriginDataSize)
 		firstWord := make([]byte, 32)
 		firstWord[31] = 0x20
 		evmOriginData = append(evmOriginData, firstWord...)
@@ -437,7 +437,7 @@ func decodeResolvedOrderFromFelts(data []*felt.Felt) (types.ResolvedCrossChainOr
 		dataSize := make([]byte, 32)
 		dataSize[31] = 0x00
 		evmOriginData = append(evmOriginData, dataSize...)
-		                if len(evmOriginData) != evmOriginDataSize {
+		if len(evmOriginData) != evmOriginDataSize {
 			fmt.Printf("   ⚠️  origin_data unexpected length: %d\n", len(evmOriginData))
 		}
 		fi.OriginData = evmOriginData

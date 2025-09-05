@@ -17,7 +17,6 @@ import (
 	"github.com/NethermindEth/starknet.go/utils"
 )
 
-
 func fundStarknet(amount *big.Int) {
 	fmt.Printf("📡 Funding Starknet network...\n")
 

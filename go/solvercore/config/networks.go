@@ -45,7 +45,7 @@ type NetworkConfig struct {
 	HyperlaneAddress common.Address
 	HyperlaneDomain  uint64 // Changed to uint64 to match new_code
 	ForkStartBlock   uint64
-	SolverStartBlock int64  // Block number where solver should start listening (fork block + 1)
+	SolverStartBlock int64 // Block number where solver should start listening (fork block + 1)
 	// Listener-specific configuration
 	PollInterval       int    // milliseconds, 0 = use default
 	ConfirmationBlocks uint64 // 0 = use default

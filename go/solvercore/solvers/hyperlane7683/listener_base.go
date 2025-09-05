@@ -17,10 +17,10 @@ type BlockNumberProvider interface {
 
 // BaseListener provides common functionality for both EVM and Starknet listeners
 type BaseListener struct {
-	config            base.ListenerConfig
+	config             base.ListenerConfig
 	lastProcessedBlock uint64
-	blockProvider     BlockNumberProvider
-	networkType       string // "EVM" or "Starknet" for logging
+	blockProvider      BlockNumberProvider
+	networkType        string // "EVM" or "Starknet" for logging
 }
 
 // NewBaseListener creates a new base listener with common functionality
@@ -41,21 +41,21 @@ func ResolveSolverStartBlock(ctx context.Context, solverStartBlock int64, blockP
 		// Positive number or zero - use as-is
 		return uint64(solverStartBlock), nil
 	}
-	
+
 	// Negative number - start N blocks before current block
 	currentBlock, err := blockProvider.BlockNumber(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get current block number: %v", err)
 	}
-	
+
 	// Calculate start block: current - abs(solverStartBlock)
 	startBlock := currentBlock - uint64(-solverStartBlock)
-	
+
 	// Ensure we don't go below block 0
 	if startBlock > currentBlock {
 		startBlock = 0
 	}
-	
+
 	return startBlock, nil
 }
 
@@ -92,7 +92,7 @@ func ProcessCurrentBlockRangeCommon(ctx context.Context, handler base.EventHandl
 			end = toBlock
 		}
 
-		logutil.LogWithNetworkTag(listenerConfig.ChainName, "🧭 %s range: from=%d to=%d (current=%d, conf=%d)\n", 
+		logutil.LogWithNetworkTag(listenerConfig.ChainName, "🧭 %s range: from=%d to=%d (current=%d, conf=%d)\n",
 			networkType, start, end, currentBlock, listenerConfig.ConfirmationBlocks)
 
 		chunkLast, err := processBlockRange(ctx, start, end, handler)

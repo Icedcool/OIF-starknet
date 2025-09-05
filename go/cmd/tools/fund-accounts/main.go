@@ -168,7 +168,7 @@ func fundNetwork(networkName string, amount *big.Int) {
 		// Check current balance
 		currentBalance, err := ethutil.ERC20Balance(client, common.HexToAddress(tokenAddress), recipient.Address)
 		if err == nil {
-			                    fmt.Printf("     📊 Current balance: %s\n", ethutil.FormatTokenAmount(currentBalance, tokenDecimals))
+			fmt.Printf("     📊 Current balance: %s\n", ethutil.FormatTokenAmount(currentBalance, tokenDecimals))
 		}
 
 		// Call mint function directly using raw transaction
@@ -178,7 +178,7 @@ func fundNetwork(networkName string, amount *big.Int) {
 			continue
 		}
 
-		            fmt.Printf("     ✅ Minted %s tokens\n", ethutil.FormatTokenAmount(amount, tokenDecimals))
+		fmt.Printf("     ✅ Minted %s tokens\n", ethutil.FormatTokenAmount(amount, tokenDecimals))
 
 		// Verify new balance
 		newBalance, err := ethutil.ERC20Balance(client, common.HexToAddress(tokenAddress), recipient.Address)
@@ -225,7 +225,7 @@ func getRecipients(useLocalForks bool) []Recipient {
 
 func createTokenAmount(tokens int64, decimals int) *big.Int {
 	amount := big.NewInt(tokens)
-	    multiplier := big.NewInt(base10)
+	multiplier := big.NewInt(base10)
 	multiplier.Exp(multiplier, big.NewInt(int64(decimals)), nil)
 	return amount.Mul(amount, multiplier)
 }
@@ -262,8 +262,8 @@ func mintTokensRaw(client *ethclient.Client, auth *bind.TransactOpts, tokenAddre
 	tx := types.NewTransaction(
 		nonce,
 		common.HexToAddress(tokenAddress),
-		big.NewInt(0), // No ETH value
-		            defaultGasLimit,        // Gas limit for mint
+		big.NewInt(0),   // No ETH value
+		defaultGasLimit, // Gas limit for mint
 		gasPrice,
 		data,
 	)

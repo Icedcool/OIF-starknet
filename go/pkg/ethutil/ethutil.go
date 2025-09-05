@@ -148,8 +148,8 @@ func ERC20Transfer(client *ethclient.Client, auth *bind.TransactOpts, tokenAddre
 	tx := gethtypes.NewTransaction(
 		nonce,
 		tokenAddress,
-		big.NewInt(0), // No ETH value
-		                transferGasLimit,        // Gas limit
+		big.NewInt(0),    // No ETH value
+		transferGasLimit, // Gas limit
 		gasPrice,
 		data,
 	)
@@ -197,8 +197,8 @@ func ERC20Approve(client *ethclient.Client, auth *bind.TransactOpts, tokenAddres
 	tx := gethtypes.NewTransaction(
 		nonce,
 		tokenAddress,
-		big.NewInt(0), // No ETH value
-		                approveGasLimit,        // Gas limit
+		big.NewInt(0),   // No ETH value
+		approveGasLimit, // Gas limit
 		gasPrice,
 		data,
 	)

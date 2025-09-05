@@ -76,15 +76,15 @@ func NewEVMListener(listenerConfig *base.ListenerConfig, rpcURL string) (base.Li
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current block for negative start block: %w", err)
 		}
-		
+
 		// Calculate start block: current - abs(configStartBlock)
 		resolvedStartBlock = currentBlock - uint64(-configStartBlock)
-		
+
 		// Ensure we don't go below block 0
 		if resolvedStartBlock > currentBlock {
 			resolvedStartBlock = 0
 		}
-		
+
 		fmt.Printf("%s📚 Start block was %d, using current block %d - %d = %d\n",
 			logutil.Prefix(listenerConfig.ChainName), configStartBlock, currentBlock, -configStartBlock, resolvedStartBlock)
 	}

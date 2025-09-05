@@ -289,9 +289,9 @@ func (sm *SolverManager) initializeHyperlane7683(ctx context.Context) error {
 				hyperlaneAddr,
 				source,
 				big.NewInt(networkConfig.SolverStartBlock), // pass original value (can be negative)
-				networkConfig.PollInterval,                  // poll interval from config
+				networkConfig.PollInterval,                 // poll interval from config
 				uint64(networkConfig.ConfirmationBlocks),   // confirmation blocks from config
-				networkConfig.MaxBlockRange,                 // max block range from config
+				networkConfig.MaxBlockRange,                // max block range from config
 			)
 
 			starknetListener, err := contracts.NewStarknetListener(listenerConfig, networkConfig.RPCURL)
@@ -309,9 +309,9 @@ func (sm *SolverManager) initializeHyperlane7683(ctx context.Context) error {
 				networkConfig.HyperlaneAddress.Hex(),
 				source,
 				big.NewInt(networkConfig.SolverStartBlock), // pass original value (can be negative)
-				networkConfig.PollInterval,                  // poll interval from config
+				networkConfig.PollInterval,                 // poll interval from config
 				uint64(networkConfig.ConfirmationBlocks),   // confirmation blocks from config
-				networkConfig.MaxBlockRange,                 // max block range from config
+				networkConfig.MaxBlockRange,                // max block range from config
 			)
 
 			evmListener, err := contracts.NewEVMListener(listenerConfig, networkConfig.RPCURL)
@@ -405,11 +405,11 @@ func resolveStartBlock(ctx context.Context, solverStartBlock int64, blockProvide
 		// Positive number or zero - use as-is
 		return uint64(solverStartBlock), nil
 	}
-	
+
 	// Negative number - start N blocks before current block
 	var currentBlock uint64
 	var err error
-	
+
 	// Handle different block provider types
 	switch provider := blockProvider.(type) {
 	case *ethclient.Client:
@@ -423,19 +423,19 @@ func resolveStartBlock(ctx context.Context, solverStartBlock int64, blockProvide
 	default:
 		return 0, fmt.Errorf("unsupported block provider type")
 	}
-	
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to get current block number: %v", err)
 	}
-	
+
 	// Calculate start block: current - abs(solverStartBlock)
 	startBlock := currentBlock - uint64(-solverStartBlock)
-	
+
 	// Ensure we don't go below block 0
 	if startBlock > currentBlock {
 		startBlock = 0
 	}
-	
+
 	return startBlock, nil
 }
 

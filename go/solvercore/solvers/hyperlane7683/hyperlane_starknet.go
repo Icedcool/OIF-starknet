@@ -150,7 +150,7 @@ func (h *HyperlaneStarknet) Fill(ctx context.Context, args types.ParsedArgs) (Or
 		return OrderActionError, fmt.Errorf("failed to convert solidity order ID for starknet: %w", err)
 	}
 
-	        calldata := make([]*felt.Felt, 0, calldataBaseSize+len(words))
+	calldata := make([]*felt.Felt, 0, calldataBaseSize+len(words))
 	calldata = append(calldata, orderIDLow, orderIDHigh)
 	calldata = append(calldata, utils.Uint64ToFelt(uint64(len(originData))))
 	calldata = append(calldata, utils.Uint64ToFelt(uint64(len(words))))

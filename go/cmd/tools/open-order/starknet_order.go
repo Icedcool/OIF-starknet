@@ -235,9 +235,9 @@ func openDefaultStarknetToEvm(networks []StarknetNetworkConfig) {
 		DestinationChain: destinationChain,
 		InputToken:       "DogCoin",
 		OutputToken:      "DogCoin",
-		InputAmount:      CreateTokenAmount(1000, 18), // 1000 tokens
-		                OutputAmount:     CreateTokenAmount(testOutputAmountStarknet, tokenDecimals),  // 999 tokens
-		User:             aliceAddress,                // Recipient address on destination chain
+		InputAmount:      CreateTokenAmount(1000, 18),                                // 1000 tokens
+		OutputAmount:     CreateTokenAmount(testOutputAmountStarknet, tokenDecimals), // 999 tokens
+		User:             aliceAddress,                                               // Recipient address on destination chain
 		OpenDeadline:     uint64(time.Now().Add(1 * time.Hour).Unix()),
 		FillDeadline:     uint64(time.Now().Add(24 * time.Hour).Unix()),
 	}
@@ -400,7 +400,7 @@ func executeStarknetOrder(order StarknetOrderConfig, networks []StarknetNetworkC
 		}
 
 		fmt.Printf("   ✅ Approval confirmed!\n")
-		
+
 		// Add a small delay to ensure blockchain state is updated after approval
 		time.Sleep(1 * time.Second)
 	} else {

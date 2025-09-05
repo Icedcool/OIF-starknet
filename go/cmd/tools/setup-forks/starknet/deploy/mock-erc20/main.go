@@ -258,13 +258,13 @@ func saveDeploymentInfo(tokens []TokenInfo, networkName string) {
 
 	// Ensure deployment directory exists
 	deploymentDir := filepath.Clean(filepath.Join("state", "deployment"))
-	        if err := os.MkdirAll(deploymentDir, deploymentDirPerms); err != nil {
+	if err := os.MkdirAll(deploymentDir, deploymentDirPerms); err != nil {
 		fmt.Printf("⚠️  Failed to create deployment directory: %s\n", err)
 		return
 	}
 
 	filename := filepath.Join(deploymentDir, fmt.Sprintf("%s-mock-erc20-deployment.json", sanitizeNetworkName(networkName)))
-	        if err := os.WriteFile(filename, data, deploymentFilePerms); err != nil {
+	if err := os.WriteFile(filename, data, deploymentFilePerms); err != nil {
 		fmt.Printf("⚠️  Failed to save deployment info: %s\n", err)
 		return
 	}

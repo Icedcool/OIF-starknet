@@ -14,7 +14,7 @@ This project extends the Open Intent Framework to support cross-chain order fill
 
 ## Documentation
 
-- **Go Solver Implementation**: [go/README.md](go/README.md) - Detailed architecture, setup, and development guide
+- **Go Solver Implementation**: [solver/README.md](solver/README.md) - Detailed architecture, setup, and development guide
 - **Testing Commands**: Run `make help` for complete command reference
 
 ## License

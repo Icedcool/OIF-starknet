@@ -14,9 +14,9 @@ import (
 
 func TestRulesEngine(t *testing.T) {
 	// Set required environment variables for tests
-	os.Setenv("SOLVER_PUB_KEY", "0x1234567890123456789012345678901234567890123456789012345678901234")
-	os.Setenv("BASE_RPC_URL", "http://localhost:8545")
-	os.Setenv("BASE_CHAIN_ID", "84532")
+	t.Setenv("SOLVER_PUB_KEY", "0x1234567890123456789012345678901234567890123456789012345678901234")
+	t.Setenv("BASE_RPC_URL", "http://localhost:8545")
+	t.Setenv("BASE_CHAIN_ID", "84532")
 	defer func() {
 		os.Unsetenv("SOLVER_PUB_KEY")
 		os.Unsetenv("BASE_RPC_URL")
@@ -36,10 +36,10 @@ func TestRulesEngine(t *testing.T) {
 	t.Run("AddRule", func(t *testing.T) {
 		engine := NewRulesEngine()
 		initialCount := len(engine.rules)
-		
+
 		rule := &BalanceRule{}
 		engine.AddRule(rule)
-		
+
 		assert.Len(t, engine.rules, initialCount+1)
 		assert.Equal(t, rule, engine.rules[initialCount])
 	})
@@ -74,7 +74,7 @@ func TestRulesEngine(t *testing.T) {
 				},
 			},
 		}
-		
+
 		result := engine.EvaluateAll(context.Background(), args)
 		// Should pass if no rules or all rules pass
 		assert.True(t, result.Passed)
@@ -82,11 +82,11 @@ func TestRulesEngine(t *testing.T) {
 
 	t.Run("EvaluateAll with passing rules", func(t *testing.T) {
 		engine := &RulesEngine{rules: []Rule{}}
-		
+
 		// Add a mock rule that always passes (no network calls)
 		rule := &MockRule{name: "MockRule", shouldPass: true}
 		engine.AddRule(rule)
-		
+
 		args := types.ParsedArgs{
 			OrderID: "0x1234567890123456789012345678901234567890123456789012345678901234",
 			ResolvedOrder: types.ResolvedCrossChainOrder{
@@ -114,7 +114,7 @@ func TestRulesEngine(t *testing.T) {
 				},
 			},
 		}
-		
+
 		result := engine.EvaluateAll(context.Background(), args)
 		assert.True(t, result.Passed)
 	})
@@ -183,8 +183,8 @@ func TestProfitabilityRule(t *testing.T) {
 			OrderID: "0x1234567890123456789012345678901234567890123456789012345678901234",
 			ResolvedOrder: types.ResolvedCrossChainOrder{
 				OriginChainID: big.NewInt(1),
-				MaxSpent:    []types.Output{},
-				MinReceived: []types.Output{},
+				MaxSpent:      []types.Output{},
+				MinReceived:   []types.Output{},
 				FillInstructions: []types.FillInstruction{
 					{
 						DestinationChainID: big.NewInt(84532), // Base Sepolia

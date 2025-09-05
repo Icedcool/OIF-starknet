@@ -19,7 +19,7 @@ import (
 
 // Constants for Starknet operations
 const (
-	U128BitShift = 128
+	U128BitShift  = 128
 	Bytes32Length = 32
 	Bytes16Length = 16
 	TokenDecimals = 18
@@ -127,7 +127,7 @@ func ERC20Allowance(provider rpc.RpcProvider, tokenAddress string, ownerAddress 
 	// Use uint256 for better performance
 	lowU := ToUint256(low)
 	highU := ToUint256(high)
-	
+
 	// Combine low and high into u256: (high << 128) | low
 	result := new(uint256.Int)
 	result.Lsh(highU, U128BitShift)
@@ -151,12 +151,12 @@ func ERC20Approve(tokenAddress string, spenderAddress string, amount *big.Int) (
 
 	// Convert amount to two felts (low, high) for u256 using uint256 for better performance
 	amountU := ToUint256(amount)
-	
+
 	// Create mask for lower 128 bits
 	lowerMask := uint256.NewInt(1)
 	lowerMask.Lsh(lowerMask, U128BitShift)
 	lowerMask.SubUint64(lowerMask, 1)
-	
+
 	// Extract low and high parts
 	low128 := new(uint256.Int)
 	low128.And(amountU, lowerMask)
@@ -188,18 +188,18 @@ func FormatTokenAmount(amount *big.Int, decimals int) string {
 func ConvertBigIntToU256Felts(value *big.Int) (low *felt.Felt, high *felt.Felt) {
 	// Convert to uint256 for better performance
 	u := ToUint256(value)
-	
+
 	// Create mask for lower 128 bits
 	lowerMask := uint256.NewInt(1)
 	lowerMask.Lsh(lowerMask, U128BitShift)
 	lowerMask.SubUint64(lowerMask, 1)
-	
+
 	// Extract low and high parts
 	lowPart := new(uint256.Int)
 	lowPart.And(u, lowerMask)
 	highPart := new(uint256.Int)
 	highPart.Rsh(u, U128BitShift)
-	
+
 	// Convert back to felts
 	low = utils.BigIntToFelt(lowPart.ToBig())
 	high = utils.BigIntToFelt(highPart.ToBig())
@@ -213,7 +213,7 @@ func ConvertSolidityOrderIDForStarknet(orderID string) (low *felt.Felt, high *fe
 	if orderBN == nil {
 		return nil, nil, fmt.Errorf("invalid hex string: %s", orderID)
 	}
-	
+
 	orderBytes := orderBN.Bytes()
 	if len(orderBytes) < Bytes32Length {
 		pad := make([]byte, Bytes32Length-len(orderBytes))

@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/NethermindEth/juno/core/felt"
@@ -111,7 +112,7 @@ func (ac *AddressConverter) ToBytes32(address string) ([32]byte, error) {
 // IsStarknetAddress checks if an address string represents a Starknet address
 func (ac *AddressConverter) IsStarknetAddress(address string) bool {
 	cleanAddr := strings.TrimPrefix(address, "0x")
-	return len(cleanAddr) == StarknetAddressLengthWithPrefix
+	return len(cleanAddr) == StarknetAddressLength // Should be 64 hex chars
 }
 
 // IsEVMAddress checks if an address string represents an EVM address
@@ -129,4 +130,36 @@ func (ac *AddressConverter) IsBytes32Address(address string) bool {
 // FormatAddress formats an address string consistently
 func (ac *AddressConverter) FormatAddress(address string) string {
 	return strings.ToLower(strings.TrimPrefix(address, "0x"))
+}
+
+// Standalone utility functions for testing and general use
+func IsStarknetAddress(address string) bool {
+	ac := NewAddressConverter()
+	return ac.IsStarknetAddress(address)
+}
+
+func IsEVMAddress(address string) bool {
+	ac := NewAddressConverter()
+	return ac.IsEVMAddress(address)
+}
+
+func HexToBytes32(hexStr string) ([32]byte, error) {
+	ac := NewAddressConverter()
+	return ac.ToBytes32(hexStr)
+}
+
+// FormatTokenAmount formats a token amount from wei to tokens with specified decimals
+// This is a shared utility function used by both EVM and Starknet operations
+func FormatTokenAmount(amount *big.Int, decimals int) string {
+	if amount == nil {
+		return "0"
+	}
+
+	// Convert from wei to tokens
+	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	tokenAmount := new(big.Float).Quo(
+		new(big.Float).SetInt(amount),
+		new(big.Float).SetInt(divisor))
+
+	return tokenAmount.Text('f', 2) + " tokens"
 }

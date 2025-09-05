@@ -36,21 +36,27 @@ reset_solver_state() {
 	mkdir -p "$STATE_DIR"
 	STATE_FILE="$STATE_DIR/solver-state.json"
 
-	# Get values from environment variables with defaults
-	# Use conditional logic: if FORKING=true, use LOCAL_* variables, otherwise use regular variables
-	if [ "$FORKING" = "true" ]; then
-		ETHEREUM_SOLVER_BLOCK=${LOCAL_ETHEREUM_SOLVER_START_BLOCK:-9121214}
-		OPTIMISM_SOLVER_BLOCK=${LOCAL_OPTIMISM_SOLVER_START_BLOCK:-32529526}
-		ARBITRUM_SOLVER_BLOCK=${LOCAL_ARBITRUM_SOLVER_START_BLOCK:-190326088}
-		BASE_SOLVER_BLOCK=${LOCAL_BASE_SOLVER_START_BLOCK:-30546661}
-		STARKNET_SOLVER_BLOCK=${LOCAL_STARKNET_SOLVER_START_BLOCK:-1850850}
-	else
-		ETHEREUM_SOLVER_BLOCK=${ETHEREUM_SOLVER_START_BLOCK:-0}
-		OPTIMISM_SOLVER_BLOCK=${OPTIMISM_SOLVER_START_BLOCK:-0}
-		ARBITRUM_SOLVER_BLOCK=${ARBITRUM_SOLVER_START_BLOCK:-0}
-		BASE_SOLVER_BLOCK=${BASE_SOLVER_START_BLOCK:-0}
-		STARKNET_SOLVER_BLOCK=${STARKNET_SOLVER_START_BLOCK:-0}
-	fi
+	ETHEREUM_SOLVER_BLOCK=${LOCAL_ETHEREUM_SOLVER_START_BLOCK:-0}
+	OPTIMISM_SOLVER_BLOCK=${LOCAL_OPTIMISM_SOLVER_START_BLOCK:-0}
+	ARBITRUM_SOLVER_BLOCK=${LOCAL_ARBITRUM_SOLVER_START_BLOCK:-0}
+	BASE_SOLVER_BLOCK=${LOCAL_BASE_SOLVER_START_BLOCK:-0}
+	STARKNET_SOLVER_BLOCK=${LOCAL_STARKNET_SOLVER_START_BLOCK:-0}
+
+	## 	# Get values from environment variables with defaults
+	## 	# Use conditional logic: if FORKING=true, use LOCAL_* variables, otherwise use regular variables
+	## 	if [ "$FORKING" = "true" ]; then
+	## 		ETHEREUM_SOLVER_BLOCK=${LOCAL_ETHEREUM_SOLVER_START_BLOCK:-9121214}
+	## 		OPTIMISM_SOLVER_BLOCK=${LOCAL_OPTIMISM_SOLVER_START_BLOCK:-32529526}
+	## 		ARBITRUM_SOLVER_BLOCK=${LOCAL_ARBITRUM_SOLVER_START_BLOCK:-190326088}
+	## 		BASE_SOLVER_BLOCK=${LOCAL_BASE_SOLVER_START_BLOCK:-30546661}
+	## 		STARKNET_SOLVER_BLOCK=${LOCAL_STARKNET_SOLVER_START_BLOCK:-1850850}
+	## 	else
+	## 		ETHEREUM_SOLVER_BLOCK=${ETHEREUM_SOLVER_START_BLOCK:-0}
+	## 		OPTIMISM_SOLVER_BLOCK=${OPTIMISM_SOLVER_START_BLOCK:-0}
+	## 		ARBITRUM_SOLVER_BLOCK=${ARBITRUM_SOLVER_START_BLOCK:-0}
+	## 		BASE_SOLVER_BLOCK=${BASE_SOLVER_START_BLOCK:-0}
+	## 		STARKNET_SOLVER_BLOCK=${STARKNET_SOLVER_START_BLOCK:-0}
+	## 	fi
 
 	# Create the solver state JSON with only last indexed blocks
 	# Note: All addresses and chain IDs now come from .env file via config package
@@ -217,12 +223,13 @@ start_starknet() {
 	# Start Katana with state forking (SolverStartBlock - 1)
 	# Use conditional logic: if FORKING=true, use LOCAL_* variables, otherwise use regular variables
 	local fork_block
-	if [ "$FORKING" = "true" ]; then
-		fork_block=${LOCAL_STARKNET_SOLVER_START_BLOCK:-1850850}
-	else
-		fork_block=${STARKNET_SOLVER_START_BLOCK:-0}
-	fi
-	katana --chain-id $STARKNET_SOLVER_START_BLOCK --fork.provider "$rpc_url" --fork.block ${fork_block} 2>&1 | while IFS= read -r line; do
+	fork_block=${LOCAL_STARKNET_SOLVER_START_BLOCK:-1850850}
+	## if [ "$FORKING" = "true" ]; then
+	## 	fork_block=${LOCAL_STARKNET_SOLVER_START_BLOCK:-1850850}
+	## else
+	## 	fork_block=${STARKNET_SOLVER_START_BLOCK:-0}
+	## fi
+	katana --chain-id $LOCAL_STARKNET_SOLVER_START_BLOCK --fork.provider "$rpc_url" --fork.block ${fork_block} 2>&1 | while IFS= read -r line; do
 		if [ "${LOG_LEVEL:-info}" = "debug" ]; then
 			echo -e "${color}${id}${RESET} $line"
 		else

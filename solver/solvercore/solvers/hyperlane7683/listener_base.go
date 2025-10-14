@@ -38,17 +38,23 @@ func NewBaseListener(config base.ListenerConfig, blockProvider BlockNumberProvid
 // - Zero: start at current block (live)
 // - Negative number: start N blocks before current block
 func ResolveSolverStartBlock(ctx context.Context, solverStartBlock int64, blockProvider BlockNumberProvider) (uint64, error) {
-	if solverStartBlock >= 0 {
-		// Positive number or zero - use as-is
+	if solverStartBlock > 0 {
+		// Positive number - use as-is
 		return uint64(solverStartBlock), nil
 	}
 
-	// Negative number - start N blocks before current block
+	// Zero or negative number - need current block
 	currentBlock, err := blockProvider.BlockNumber(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get current block number: %v", err)
 	}
 
+	if solverStartBlock == 0 {
+		// Zero - start at current block (live)
+		return currentBlock, nil
+	}
+
+	// Negative number - start N blocks before current block
 	// Calculate start block: current - abs(solverStartBlock)
 	startBlock := currentBlock - uint64(-solverStartBlock)
 
@@ -200,26 +206,34 @@ func ResolveCommonListenerConfig(
 	configStartBlock := listenerConfig.InitialBlock.Int64()
 	var resolvedStartBlock uint64
 
-	if configStartBlock >= 0 {
-		// Positive number or zero - use as-is
+	if configStartBlock > 0 {
+		// Positive number - use as-is
 		resolvedStartBlock = uint64(configStartBlock)
 	} else {
-		// Negative number - start N blocks before current block
+		// Zero or negative number - need current block
 		currentBlock, err := blockProvider.BlockNumber(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current block number: %v", err)
 		}
 
-		// Calculate start block: current - abs(configStartBlock)
-		resolvedStartBlock = currentBlock - uint64(-configStartBlock)
+		if configStartBlock == 0 {
+			// Zero - start at current block (live)
+			resolvedStartBlock = currentBlock
+			fmt.Printf("%s📚 Start block was 0, using current block %d\n",
+				logutil.Prefix(listenerConfig.ChainName), currentBlock)
+		} else {
+			// Negative number - start N blocks before current block
+			// Calculate start block: current - abs(configStartBlock)
+			resolvedStartBlock = currentBlock - uint64(-configStartBlock)
 
-		// Ensure we don't go below block 0
-		if resolvedStartBlock > currentBlock {
-			resolvedStartBlock = 0
+			// Ensure we don't go below block 0
+			if resolvedStartBlock > currentBlock {
+				resolvedStartBlock = 0
+			}
+
+			fmt.Printf("%s📚 Start block was %d, using current block %d - %d = %d\n",
+				logutil.Prefix(listenerConfig.ChainName), configStartBlock, currentBlock, -configStartBlock, resolvedStartBlock)
 		}
-
-		fmt.Printf("%s📚 Start block was %d, using current block %d - %d = %d\n",
-			logutil.Prefix(listenerConfig.ChainName), configStartBlock, currentBlock, -configStartBlock, resolvedStartBlock)
 	}
 
 	state, err := config.GetSolverState()

@@ -111,7 +111,7 @@ start_starknet_fork() {
   # Choose RPC endpoint based on availability
   local rpc_url
   if [ -n "$ALCHEMY_API_KEY" ]; then
-    rpc_url="https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_8/${ALCHEMY_API_KEY}"
+    rpc_url="https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_9/${ALCHEMY_API_KEY}"
     echo -e "${color}${id}${RESET} Using Alchemy RPC for Starknet"
   else
     rpc_url="https://free-rpc.nethermind.io/starknet-sepolia-juno/"
